@@ -8,6 +8,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # Er is geen sibling-checkout ../rgs-django-utils in CI. Zonder committe
+      # lockfile solvet pixi ook de default/dev-env, die die editable path-dep
+      # vereist → canonicalization-fout. Strip de dev-path-regel vóór install
+      # (zelfde patroon als de consumer-Dockerfiles); prod haalt utils uit git.
+      - name: Strip dev-only path dep (utils komt in prod uit git)
+        run: sed -i '/^rgs-django-utils = { path =/d' pixi.toml
       # prod-solve-group: rgs-django-utils via git (geen sibling-checkout in CI)
       - uses: prefix-dev/setup-pixi@v0.8.10
         with:
