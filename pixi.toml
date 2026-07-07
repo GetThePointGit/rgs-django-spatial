@@ -39,6 +39,9 @@ shapely = "2.0.*"
 python-dotenv = ">=1.1.0,<2"
 psycopg = "3.2.*"
 
+# WMS/WFS-capabilities parsing (tiles.ogc_capabilities)
+owslib = "*"
+
 pip = "*"
 
 [pypi-dependencies]
@@ -56,6 +59,9 @@ GeoAlchemy2 = "==0.20.*"
 
 # xlsxwriter (over openpyxl) because it is faster and has better support for styling
 xlsxwriter = "==3.*"  # used for exporting excel files
+
+# S3-opslag voor tiles (tiles.storage)
+s3fs = "*"
 
 # pytest hier (gedeeld) zodat de prod-env in CI de tests kan draaien zonder de
 # sibling-checkout (die alleen de dev-env nodig heeft).
