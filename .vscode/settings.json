@@ -1,0 +1,8 @@
+{
+  "files.exclude": {
+    "**/.env": true,
+    "**/.env.dev": true,
+    "**/.env.production": true,
+    "**/secrets/**": true
+  }
+}
