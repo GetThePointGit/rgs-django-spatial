@@ -19,12 +19,14 @@ def _gen_random_uuid() -> Func:
     return func
 
 
-class SpatialStyle(models.Model):
-    """Mapbox stijl voor gebruik in lagen."""
+class SpatialKleurenset(models.Model):
+    """Gedeelde set categorie-kleuren (bv. baggerklasse) die door meerdere stijlen wordt gebruikt.
 
-    # Uuid-pk (spec §4): Django-default voor de ORM, DB-default voor Hasura-inserts
-    # zonder id. De frontend-upsert conflicteert op spatial_style_pkey en stuurt
-    # zelf een uuid mee, dus 'id' moet in de insert_input zitten (auth="is-").
+    Een stijl-as met modus ``kleurenset`` verwijst via ``kleurensetId`` (uuid) naar dit record;
+    de lib compileert de categorieën dan als een gewone categorie-as (spec §2).
+    """
+
+    # Django-default (ORM) én DB-default (Hasura insert zonder id) — zie spec §4.
     id = models.UUIDField(
         primary_key=True,
         default=uuid.uuid4,
@@ -32,40 +34,41 @@ class SpatialStyle(models.Model):
         editable=False,
         config=models.Config(permissions=models.FPerm(auth="is-")),
     )
-    name = models.TextStringField(
+    name = models.CharField(
+        max_length=200,
         verbose_name="naam",
         config=models.Config(
-            doc_short="Naam van de kaartbron",
+            doc_short="Naam van de kleurenset",
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
-    notes = models.TextStringField(
+    notes = models.TextField(
         verbose_name="opmerkingen",
         null=True,
         blank=True,
         config=models.Config(
-            doc_short="opmerkingen bij stijl",
+            doc_short="Opmerkingen bij de kleurenset",
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
-
-    style_config = models.JSONField(
-        verbose_name="stijl configuratie",
+    categorieen = models.JSONField(
+        verbose_name="categorieën",
+        default=list,
         config=models.Config(
-            doc_short="Configuratie van de stijl, afhankelijk van het type",
+            doc_short="Lijst van { waarde, label, kleur }",
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
 
     class Meta:
-        db_table = "spatial_style"
-        verbose_name = "kaart stijl"
-        verbose_name_plural = "kaart stijlen"
+        db_table = "spatial_kleurenset"
+        verbose_name = "kleurenset"
+        verbose_name_plural = "kleurensets"
         ordering = ["name"]
 
     class TableDescription:
         section = section_maps
-        order = 7
+        order = 8
         modules = "*"
 
     def __str__(self):

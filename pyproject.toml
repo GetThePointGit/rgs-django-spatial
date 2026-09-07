@@ -1,6 +1,6 @@
 [project]
 name = "rgs-django-spatial"
-version = "0.2.0"
+version = "0.3.0"
 description = "Data model and functions for configuring maps sources"
 readme = "README.md"
 requires-python = "~=3.12"
