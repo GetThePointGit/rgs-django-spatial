@@ -20,3 +20,13 @@ jobs:
           environments: prod
           cache: false
       - run: pixi run -e prod python -m pytest tests/ -v
+      # Bewaakt dat modelwijzigingen altijd in een migratie zitten (final-review
+      # Important 2). --skip-checks is nodig omdat de sqlite-testsettings
+      # 'django.contrib.postgres' niet in INSTALLED_APPS hebben (nodig voor
+      # ArrayField op EnumMapAuthTypeExtended/-SourceTypeExtended/SpatialLayer/
+      # SpatialMap, postgres.E005) — een pre-existing system-check, los van dit
+      # ticket; migraties zelf worden hier niet overgeslagen.
+      - name: Check for missing migrations
+        run: >-
+          PYTHONPATH=tests DJANGO_SETTINGS_MODULE=testapp.settings_test
+          pixi run -e prod python -m django makemigrations --check --dry-run --skip-checks rgs_django_spatial

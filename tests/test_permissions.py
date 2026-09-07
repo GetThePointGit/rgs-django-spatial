@@ -12,6 +12,7 @@ from django.test import SimpleTestCase, override_settings
 from rgs_django_utils.database.permission_helper import PermissionHelper
 
 from rgs_django_spatial.models import (
+    SpatialKleurenset,
     SpatialLayer,
     SpatialLayerStyle,
     SpatialMap,
@@ -42,6 +43,7 @@ MUTATION_MODELS = [
     SpatialMapLayer,
     SpatialStyle,
     SpatialLayerStyle,
+    SpatialKleurenset,
 ]
 
 
