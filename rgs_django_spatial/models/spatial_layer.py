@@ -212,12 +212,19 @@ class SpatialLayer(models.Model):
 
     @classmethod
     def get_permissions(cls):
+        # Mutaties (insert/update/delete) zijn beheer, geen leeswerk: alleen
+        # org_adm (en staf hoger in de rolketen sys_adm/dev/dev_man) mag
+        # kaartlagen aanmaken/wijzigen/verwijderen. `auth` behoudt select,
+        # zodat elke ingelogde gebruiker kaartlagen kan bekijken.
+        # Zie GetThePointGit/rgs-django-spatial#1.
         no_filt = {}
 
         return models.TPerm(
             public=None,
             auth={
                 "select": no_filt,
+            },
+            org_adm={
                 "insert": no_filt,
                 "update": no_filt,
                 "delete": no_filt,
