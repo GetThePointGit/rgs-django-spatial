@@ -4,6 +4,7 @@ Draait serieel en synchroon (bedoeld voor een Kubernetes CronJob of handmatig
 in dev). Interval komt van de kleinste ``refresh_interval`` (minuten) van de
 gekoppelde lagen; een bron zonder geslaagde build is altijd aan de beurt.
 """
+
 from django.core.management.base import BaseCommand
 from django.db.models import Min
 from django.utils import timezone
@@ -44,7 +45,6 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         from rgs_django_spatial.models import SpatialSource
-
         from rgs_django_spatial.tiles.spatial_service import build_tiles_for_source
 
         now = timezone.now()

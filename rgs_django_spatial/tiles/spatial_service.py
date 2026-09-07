@@ -3,6 +3,7 @@
 Synchroon, testbaar werk in ``build_tiles_for_source``; ``start_spatial_tile_build``
 draait dat in een daemon-thread. Bewust geen Celery: er is in dit project geen broker.
 """
+
 import contextlib
 import logging
 import os
@@ -77,14 +78,14 @@ def spatial_tiles_key(source_id: int) -> str:
 def gdal_input_for_source(source):
     """Bepaal de GDAL-input voor een bron.
 
-    Returns
+    Returns:
     -------
     tuple
         ``(contextmanager die het GDAL-pad yieldt, optionele laagnaam)``.
         Voor een bestand-bron is dat een lokale tempkopie van ``source.file``;
         voor een WFS-bron de GDAL WFS-connectiestring (geen tempbestand).
 
-    Raises
+    Raises:
     ------
     ValueError
         Als de bron geen bruikbare input heeft.
@@ -119,8 +120,8 @@ def build_tiles_for_source(source_id: int) -> None:
         gdal_ctx, layer_name = gdal_input_for_source(obj)
         # Zoombereik van de eerste gekoppelde laag, anders defaults.
         first_layer = SpatialLayer.objects.filter(source=obj).order_by("id").first()
-        minzoom = (first_layer.min_zoom if first_layer and first_layer.min_zoom is not None else 0)
-        maxzoom = (first_layer.max_zoom if first_layer and first_layer.max_zoom is not None else 14)
+        minzoom = first_layer.min_zoom if first_layer and first_layer.min_zoom is not None else 0
+        maxzoom = first_layer.max_zoom if first_layer and first_layer.max_zoom is not None else 14
 
         with gdal_auth_config(obj), gdal_ctx as src:
             info = inspect_vector(src, layer_name)
@@ -128,8 +129,9 @@ def build_tiles_for_source(source_id: int) -> None:
             available_layers = inspect_layers(src)
             with tempfile.TemporaryDirectory() as td:
                 dst = os.path.join(td, f"{source_id}.pmtiles")
-                generate_pmtiles(src, dst, minzoom=minzoom, maxzoom=maxzoom,
-                                 layers=[layer_name] if layer_name else None)
+                generate_pmtiles(
+                    src, dst, minzoom=minzoom, maxzoom=maxzoom, layers=[layer_name] if layer_name else None
+                )
                 store_pmtiles(spatial_tiles_key(source_id), dst)
 
         # Metadata naar alle gekoppelde lagen (source_layer = MVT-laagnaam).
@@ -192,7 +194,6 @@ def build_served_geojson_for_source(source_id: int, source_crs: str | None = Non
         Overschrijf de bron-CRS (bv. ``"EPSG:28992"``); ``None`` = uit het bestand.
     """
     from rgs_django_spatial.models import SpatialLayer, SpatialSource
-
     from rgs_django_spatial.tiles.pmtiles import reproject_to_geojson
     from rgs_django_spatial.tiles.storage import store_pmtiles
 

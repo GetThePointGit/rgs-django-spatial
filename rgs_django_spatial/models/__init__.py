@@ -1,4 +1,4 @@
-from .enums import *
+from .enums import EnumMapAuthType, EnumMapSourceType
 from .spatial_layer import SpatialLayer
 from .spatial_source import SpatialSource
 from .spatial_style import SpatialStyle

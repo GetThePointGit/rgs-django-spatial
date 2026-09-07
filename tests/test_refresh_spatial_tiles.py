@@ -1,4 +1,5 @@
 """Pure tests voor de due-selectie van refresh_spatial_tiles (geen DB)."""
+
 from datetime import datetime, timedelta, timezone
 
 from rgs_django_spatial.management.commands.refresh_spatial_tiles import is_due
