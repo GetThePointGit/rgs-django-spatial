@@ -19,6 +19,20 @@ def _gen_random_uuid() -> Func:
     return func
 
 
+def _lege_lijst() -> list:
+    """Django-default voor ``categorieen`` (korte Returns-sectie, Google-stijl —
+    zo staat ``[tool.ruff.lint.pydocstyle] convention`` in dit project).
+
+    Bewust een eigen functie i.p.v. ``list``: rgs_django_utils'
+    install_db_defaults_and_relation_cascading() behandelt ``default is list``
+    als integer-ArrayField en zet dan ``array[]::integer[]``, wat op jsonb faalt.
+
+    Returns:
+        Een lege lijst.
+    """
+    return []
+
+
 class SpatialKleurenset(models.Model):
     """Gedeelde set categorie-kleuren (bv. baggerklasse) die door meerdere stijlen wordt gebruikt.
 
@@ -51,14 +65,17 @@ class SpatialKleurenset(models.Model):
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
-    # Alleen db_default (geen Django-`default=list`): rgs_django_utils'
-    # install_db_defaults_and_relation_cascading() herkent élk veld met
-    # `default=list` als een integer-ArrayField en zet dan een
-    # `array[]::integer[]`-default, wat op deze jsonb-kolom faalt. De
-    # db_default hieronder levert zelf al de lege-lijst-default die Hasura
-    # nodig heeft voor inserts zonder categorieen.
+    # Django-default (`_lege_lijst`, ORM — o.a. een onopgeslagen instantie heeft
+    # meteen `categorieen == []` i.p.v. het `DatabaseDefault`-sentinel dat
+    # `db_default` alleen zou geven) én db_default (Hasura insert zonder
+    # categorieen). `_lege_lijst` is bewust géén `list` en géén lambda: `list`
+    # triggert in rgs_django_utils' install_db_defaults_and_relation_cascading()
+    # de `default is list`-tak (bedoeld voor een integer-ArrayField), die dan een
+    # `array[]::integer[]`-default op deze jsonb-kolom probeert te zetten en
+    # faalt; een lambda kan `makemigrations` niet serialiseren.
     categorieen = models.JSONField(
         verbose_name="categorieën",
+        default=_lege_lijst,
         db_default=[],
         config=models.Config(
             doc_short="Lijst van { waarde, label, kleur }",

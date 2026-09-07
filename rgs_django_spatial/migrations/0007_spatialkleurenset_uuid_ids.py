@@ -8,6 +8,10 @@ import django.db.models.deletion
 import rgs_django_utils.database.dj_extended_models
 from django.db import migrations, models
 
+# Zelfde functie-object als het model (niet opnieuw gedefinieerd): makemigrations
+# vergelijkt defaults op identiteit, dus een losse kopie zou --check laten falen.
+from rgs_django_spatial.models.spatial_kleurenset import _lege_lijst
+
 
 def _gen_random_uuid() -> models.Func:
     """Bouwt de db_default-expressie ``gen_random_uuid()`` (Postgres, spec §4).
@@ -52,7 +56,9 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "categorieen",
-                    rgs_django_utils.database.dj_extended_models.JSONField(db_default=[], verbose_name="categorieën"),
+                    rgs_django_utils.database.dj_extended_models.JSONField(
+                        db_default=[], default=_lege_lijst, verbose_name="categorieën"
+                    ),
                 ),
             ],
             options={
