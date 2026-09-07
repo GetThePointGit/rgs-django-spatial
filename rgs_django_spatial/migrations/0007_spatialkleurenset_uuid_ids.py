@@ -52,7 +52,7 @@ class Migration(migrations.Migration):
                 ),
                 (
                     "categorieen",
-                    rgs_django_utils.database.dj_extended_models.JSONField(default=list, verbose_name="categorieën"),
+                    rgs_django_utils.database.dj_extended_models.JSONField(db_default=[], verbose_name="categorieën"),
                 ),
             ],
             options={

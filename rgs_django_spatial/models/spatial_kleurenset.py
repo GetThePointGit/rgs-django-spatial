@@ -51,9 +51,15 @@ class SpatialKleurenset(models.Model):
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
+    # Alleen db_default (geen Django-`default=list`): rgs_django_utils'
+    # install_db_defaults_and_relation_cascading() herkent élk veld met
+    # `default=list` als een integer-ArrayField en zet dan een
+    # `array[]::integer[]`-default, wat op deze jsonb-kolom faalt. De
+    # db_default hieronder levert zelf al de lege-lijst-default die Hasura
+    # nodig heeft voor inserts zonder categorieen.
     categorieen = models.JSONField(
         verbose_name="categorieën",
-        default=list,
+        db_default=[],
         config=models.Config(
             doc_short="Lijst van { waarde, label, kleur }",
             permissions=models.FPerm("---", auth="isu"),

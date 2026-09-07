@@ -20,6 +20,16 @@ def test_kleurenset_krijgt_uuid_en_bewaart_categorieen():
 
 
 @pytest.mark.django_db
+def test_kleurenset_zonder_categorieen_krijgt_lege_lijst_via_db_default():
+    """db_default=[] i.p.v. default=list (zie modelcommentaar): een insert zonder
+    categorieen — zoals Hasura die zou doen — moet toch een lege lijst opleveren.
+    """
+    ks = SpatialKleurenset.objects.create(name="Leeg")
+    ks.refresh_from_db()
+    assert ks.categorieen == []
+
+
+@pytest.mark.django_db
 def test_style_id_is_uuid_en_layer_style_fk_volgt():
     st = SpatialStyle.objects.create(name="s", style_config={"versie": 3, "lagen": []})
     assert isinstance(st.id, uuid.UUID)
