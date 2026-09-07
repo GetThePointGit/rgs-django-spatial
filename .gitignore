@@ -179,3 +179,5 @@ pixi.lock
 
 # mac system files
 .DS_Store
+# Claude Code-worktrees
+.claude/worktrees/
