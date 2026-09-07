@@ -47,8 +47,11 @@ def _schrijf_geojson(features: list[dict]) -> str:
 
 
 def _punt(soort) -> dict:
-    return {"type": "Feature", "properties": {"soort": soort},
-            "geometry": {"type": "Point", "coordinates": [5.0, 52.0]}}
+    return {
+        "type": "Feature",
+        "properties": {"soort": soort},
+        "geometry": {"type": "Point", "coordinates": [5.0, 52.0]},
+    }
 
 
 def test_inspect_layers_geeft_veldnamen():
@@ -111,14 +114,15 @@ def test_distinct_veldwaarden_onbekende_laag():
 
 def test_distinct_veldwaarden_max_features_capt_scan(tmp_path):
     import json
+
     p = tmp_path / "veel.geojson"
     features = [
-        {"type": "Feature", "properties": {"k": f"v{i}"},
-         "geometry": {"type": "Point", "coordinates": [i, i]}}
+        {"type": "Feature", "properties": {"k": f"v{i}"}, "geometry": {"type": "Point", "coordinates": [i, i]}}
         for i in range(5)
     ]
     p.write_text(json.dumps({"type": "FeatureCollection", "features": features}))
     from rgs_django_spatial.tiles.pmtiles import distinct_veldwaarden
+
     # Zonder cap: 5 unieke waarden (afgekapt False want < limiet 20).
     waarden, afgekapt = distinct_veldwaarden(str(p), "k")
     assert set(waarden) == {"v0", "v1", "v2", "v3", "v4"}

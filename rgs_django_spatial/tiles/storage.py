@@ -17,6 +17,7 @@ TILES_STORAGE ("local"|"s3", default "local"), VAR_DIR (default "var"),
 TILES_URL_TTL (default 86400) en — alleen bij "s3" — TILES_S3
 (dict: key, secret, endpoint_url, bucket, optioneel prefix/region).
 """
+
 import os
 import shutil
 
@@ -99,7 +100,7 @@ def read_object(key: str) -> bytes:
     kleine bestanden die door Django worden gestreamd (i.t.t. PMTiles, die de
     browser via een presigned URL rechtstreeks bij S3 ophaalt).
 
-    Raises
+    Raises:
     ------
     FileNotFoundError
         Als het object niet bestaat.

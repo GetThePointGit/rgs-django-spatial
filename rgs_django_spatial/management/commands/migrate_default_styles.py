@@ -4,6 +4,7 @@ Eenmalig/idempotent: per kaartlaag met een default_style en zonder bestaande
 SpatialLayerStyle-records wordt één SpatialStyle + koppeling "Standaard"
 aangemaakt. De default_style-kolom blijft staan als overgangs-fallback.
 """
+
 from django.core.management.base import BaseCommand
 
 
@@ -15,7 +16,7 @@ def wil_migreren(default_style, bestaande_stijl_count: int) -> bool:
 def zorg_voor_standaard_stijl(map_layer) -> bool:
     """Maak (idempotent) een standaard-stijlrecord voor deze kaartlaag.
 
-    Returns
+    Returns:
     -------
     bool
         True als er een record is aangemaakt.

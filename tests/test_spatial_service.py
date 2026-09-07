@@ -1,4 +1,5 @@
 """Pure tests voor de spatial-tilepijplijn (geen database)."""
+
 from osgeo import gdal
 
 from rgs_django_spatial.tiles.spatial_service import gdal_auth_config, gdal_input_for_source, spatial_tiles_key
@@ -14,6 +15,7 @@ class FakeSource:
 
 class FakeAuthSource:
     """Stub-bron met auth-velden voor gdal_auth_config."""
+
     def __init__(self, source_type_id, source_config, auth_type=None, auth_config=None):
         self.source_type_id = source_type_id
         self.source_config = source_config
@@ -36,6 +38,7 @@ def test_gdal_input_wfs_bouwt_wfs_url():
 
 def test_gdal_input_wfs_zonder_url_faalt():
     import pytest
+
     src = FakeSource("wfs", {})
     with pytest.raises(ValueError):
         gdal_input_for_source(src)
@@ -43,6 +46,7 @@ def test_gdal_input_wfs_zonder_url_faalt():
 
 def test_gdal_input_bestand_zonder_file_faalt():
     import pytest
+
     src = FakeSource("geojson", {}, file=None)
     with pytest.raises(ValueError):
         gdal_input_for_source(src)
@@ -68,8 +72,7 @@ def test_gdal_input_geojson_lokaal_valt_terug_op_bestand():
 
 
 def test_gdal_auth_config_zet_en_herstelt_userpwd():
-    src = FakeAuthSource("wfs", {"url": "x"}, auth_type="basic_auth",
-                         auth_config={"username": "u", "password": "p"})
+    src = FakeAuthSource("wfs", {"url": "x"}, auth_type="basic_auth", auth_config={"username": "u", "password": "p"})
     assert gdal.GetThreadLocalConfigOption("GDAL_HTTP_USERPWD") is None
     with gdal_auth_config(src):
         assert gdal.GetThreadLocalConfigOption("GDAL_HTTP_USERPWD") == "u:p"

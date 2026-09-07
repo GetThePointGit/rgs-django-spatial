@@ -10,6 +10,7 @@ De consumer-app bepaalt de MultiMapProxy-bestandsnaam (het ``{app}``-segment in
 het pad); dit pakket genereert alleen de YAML-inhoud. De WMS-servicetitel komt
 uit ``settings.MAPPROXY_TITLE`` (default ``"MapProxy"``).
 """
+
 import logging
 
 import yaml

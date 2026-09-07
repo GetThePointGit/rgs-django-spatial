@@ -5,15 +5,16 @@ from django.db import migrations
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('rgs_django_spatial', '0004_spatialtheme_spatialmaplayer_default_label_field_and_more'),
+        ("rgs_django_spatial", "0004_spatialtheme_spatialmaplayer_default_label_field_and_more"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='spatialsource',
-            name='tiles_updated_at',
-            field=rgs_django_utils.database.dj_extended_models.DateTimeField(blank=True, null=True, verbose_name='tiles bijgewerkt op'),
+            model_name="spatialsource",
+            name="tiles_updated_at",
+            field=rgs_django_utils.database.dj_extended_models.DateTimeField(
+                blank=True, null=True, verbose_name="tiles bijgewerkt op"
+            ),
         ),
     ]

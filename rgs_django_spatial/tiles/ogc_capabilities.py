@@ -26,7 +26,7 @@ def parse_wms(wms) -> list[dict]:
         Object met ``.contents`` (dict van laagnaam→laagobject) en
         ``.getOperationByName("GetMap").formatOptions``.
 
-    Returns
+    Returns:
     -------
     list of dict
         Per laag ``{"name","title","abstract","bbox_wgs84","crs","formats","queryable","geometry_type"}``.
@@ -63,7 +63,7 @@ def parse_wfs(wfs) -> list[dict]:
     wfs : owslib.wfs.WebFeatureService or stub
         Object met ``.contents`` (dict van typename→feature-type-object).
 
-    Returns
+    Returns:
     -------
     list of dict
         Per feature type ``{"name","title","abstract","bbox_wgs84","crs","formats","queryable","geometry_type"}``.
@@ -101,12 +101,12 @@ def discover_layers(
     timeout : int
         Netwerk-timeout in seconden.
 
-    Returns
+    Returns:
     -------
     dict
         ``{"service","version","title","layers":[...]}``.
 
-    Raises
+    Raises:
     ------
     ValueError
         Bij een onbekende ``service``.
