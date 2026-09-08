@@ -1,4 +1,5 @@
 """Schrijf de gegenereerde MapProxy-config naar een map (lokale docker-compose)."""
+
 import os
 
 from django.core.management.base import BaseCommand

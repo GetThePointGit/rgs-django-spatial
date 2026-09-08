@@ -1,4 +1,5 @@
 """Minimale Django-settings voor de pure pakket-tests (geen echte DB)."""
+
 SECRET_KEY = "test-only"
 USE_TZ = True
 INSTALLED_APPS = [

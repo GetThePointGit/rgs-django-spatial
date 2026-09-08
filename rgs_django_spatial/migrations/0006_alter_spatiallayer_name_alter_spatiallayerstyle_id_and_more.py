@@ -5,44 +5,43 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('rgs_django_spatial', '0005_spatialsource_tiles_updated_at'),
+        ("rgs_django_spatial", "0005_spatialsource_tiles_updated_at"),
     ]
 
     operations = [
         migrations.AlterField(
-            model_name='spatiallayer',
-            name='name',
-            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name='naam'),
+            model_name="spatiallayer",
+            name="name",
+            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name="naam"),
         ),
         migrations.AlterField(
-            model_name='spatiallayerstyle',
-            name='id',
+            model_name="spatiallayerstyle",
+            name="id",
             field=rgs_django_utils.database.dj_extended_models.BigAutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='spatialmap',
-            name='name',
-            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name='naam'),
+            model_name="spatialmap",
+            name="name",
+            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name="naam"),
         ),
         migrations.AlterField(
-            model_name='spatialsource',
-            name='name',
-            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name='naam'),
+            model_name="spatialsource",
+            name="name",
+            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name="naam"),
         ),
         migrations.AlterField(
-            model_name='spatialstyle',
-            name='id',
+            model_name="spatialstyle",
+            name="id",
             field=rgs_django_utils.database.dj_extended_models.BigAutoField(primary_key=True, serialize=False),
         ),
         migrations.AlterField(
-            model_name='spatialtheme',
-            name='name',
-            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name='naam'),
+            model_name="spatialtheme",
+            name="name",
+            field=rgs_django_utils.database.dj_extended_models.TextStringField(unique=True, verbose_name="naam"),
         ),
         migrations.AddConstraint(
-            model_name='spatialmaplayer',
-            constraint=models.UniqueConstraint(fields=('map', 'layer'), name='unique_map_layer'),
+            model_name="spatialmaplayer",
+            constraint=models.UniqueConstraint(fields=("map", "layer"), name="unique_map_layer"),
         ),
     ]

@@ -1,4 +1,5 @@
 """REST-endpoints voor SpatialSource-ingest (upload, tile-generatie, tile-URL's)."""
+
 import logging
 from typing import Optional
 
@@ -40,11 +41,13 @@ def list_tile_urls(request: HttpRequest):
 
     out = []
     for obj in SpatialSource.objects.filter(tile_status="klaar"):
-        out.append({
-            "source_id": obj.id,
-            "tiles_url": pmtiles_url(spatial_tiles_key(obj.id)),
-            "tiles_key": spatial_tiles_key(obj.id),
-        })
+        out.append(
+            {
+                "source_id": obj.id,
+                "tiles_url": pmtiles_url(spatial_tiles_key(obj.id)),
+                "tiles_key": spatial_tiles_key(obj.id),
+            }
+        )
     return out
 
 
@@ -88,7 +91,8 @@ def capabilities(request: HttpRequest, payload: CapabilitiesRequest):
         return 400, {"error": "Alleen http- of https-URL's zijn toegestaan."}
     try:
         result = discover_layers(
-            service, payload.url,
+            service,
+            payload.url,
             username=(payload.username or None),
             password=(payload.password or None),
         )
@@ -114,9 +118,9 @@ class VeldWaardenSchema(Schema):
 def veld_waarden(request: HttpRequest, id: int, veld: str, laag: Optional[str] = None):
     """Distinct waarden van een attribuutveld uit de bron (max 20), voor de
     categorie-auto-load in de stijleditor. Werkt voor bestand-, WFS- en
-    remote-geojson-bronnen; remote bronnen worden gecapt op de eerste 500 features."""
+    remote-geojson-bronnen; remote bronnen worden gecapt op de eerste 500 features.
+    """
     from rgs_django_spatial.models import SpatialSource
-
     from rgs_django_spatial.tiles.pmtiles import distinct_veldwaarden
 
     obj = get_object_or_404(SpatialSource, id=id)
@@ -149,7 +153,6 @@ def velden(request: HttpRequest, id: int, laag: Optional[str] = None):
     remote-geojson-bronnen.
     """
     from rgs_django_spatial.models import SpatialSource
-
     from rgs_django_spatial.tiles.pmtiles import inspect_layers
 
     obj = get_object_or_404(SpatialSource, id=id)
@@ -163,7 +166,7 @@ def velden(request: HttpRequest, id: int, laag: Optional[str] = None):
     except (ValueError, RuntimeError) as e:
         return 400, {"error": str(e)}
     keuze = laag or layer_name
-    gekozen = next((l for l in lagen if l["name"] == keuze), lagen[0] if lagen else None)
+    gekozen = next((laag_item for laag_item in lagen if laag_item["name"] == keuze), lagen[0] if lagen else None)
     return 200, {"velden": gekozen["fields"] if gekozen else []}
 
 
@@ -243,7 +246,8 @@ def served_geojson(request: HttpRequest, id: int):
 @router.get("/mapproxy-config.yaml", response={200: None})
 def mapproxy_config(request: HttpRequest):
     """Gegenereerde MapProxy-config; wordt cluster-intern gepolld door de
-    config-sync-sidecar in de MapProxy-pod (niet via de ingress ontsloten)."""
+    config-sync-sidecar in de MapProxy-pod (niet via de ingress ontsloten).
+    """
     from rgs_django_spatial.mapproxy import heeft_reproject_bronnen, render_mapproxy_yaml
 
     # Lege config laat MapProxy crashen (IndexError op layers: []); 404 laat de

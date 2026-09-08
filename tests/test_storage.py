@@ -4,6 +4,7 @@ S3 upload + presign are covered by an integration test gated on real creds;
 here we only assert the pure key/path-building helpers, using monkeypatch
 against ``django.conf.settings`` (this project does not use pytest-django).
 """
+
 import os
 
 from django.conf import settings as dj_settings
@@ -28,7 +29,9 @@ def test_local_pmtiles_url_is_stable_path(monkeypatch):
 
 def test_local_pmtiles_path_supports_subdir(monkeypatch, tmp_path):
     from django.conf import settings
+
     from rgs_django_spatial.tiles.storage import local_pmtiles_path
+
     monkeypatch.setattr(settings, "VAR_DIR", str(tmp_path), raising=False)
     assert local_pmtiles_path("spatial/7.pmtiles") == str(tmp_path / "tiles" / "spatial" / "7.pmtiles")
 
@@ -46,7 +49,9 @@ def test_store_pmtiles_local_moves_file(monkeypatch, tmp_path):
 
 def test_store_pmtiles_local_creates_subdirs(monkeypatch, tmp_path):
     from django.conf import settings
-    from rgs_django_spatial.tiles.storage import store_pmtiles, local_pmtiles_path
+
+    from rgs_django_spatial.tiles.storage import local_pmtiles_path, store_pmtiles
+
     monkeypatch.setattr(settings, "VAR_DIR", str(tmp_path), raising=False)
     monkeypatch.setattr(settings, "TILES_STORAGE", "local", raising=False)
     src = tmp_path / "in.pmtiles"
@@ -75,7 +80,9 @@ def test_s3_object_path_builds_bucket_and_key(monkeypatch):
 
 def test_delete_pmtiles_local_removes_file(monkeypatch, tmp_path):
     from django.conf import settings as dj_settings
+
     from rgs_django_spatial.tiles import storage
+
     monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
     monkeypatch.setattr(dj_settings, "VAR_DIR", str(tmp_path), raising=False)
     dst = tmp_path / "tiles" / "5.pmtiles"
@@ -87,7 +94,9 @@ def test_delete_pmtiles_local_removes_file(monkeypatch, tmp_path):
 
 def test_delete_pmtiles_local_missing_is_noop(monkeypatch, tmp_path):
     from django.conf import settings as dj_settings
+
     from rgs_django_spatial.tiles import storage
+
     monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
     monkeypatch.setattr(dj_settings, "VAR_DIR", str(tmp_path), raising=False)
     storage.delete_pmtiles("999.pmtiles")  # must not raise
@@ -95,4 +104,5 @@ def test_delete_pmtiles_local_missing_is_noop(monkeypatch, tmp_path):
 
 def test_settings_expose_tiles_storage_default_local():
     from django.conf import settings
+
     assert getattr(settings, "TILES_STORAGE", "local") == "local"
