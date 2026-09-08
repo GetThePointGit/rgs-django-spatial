@@ -65,3 +65,9 @@ class SpatialStyleAdmin(admin.ModelAdmin):
 class SpatialThemeAdmin(admin.ModelAdmin):
     list_display = ("name", "order")
     search_fields = ("name",)
+
+
+@admin.register(models.SpatialKleurenset)
+class SpatialKleurensetAdmin(admin.ModelAdmin):
+    list_display = ("id", "name")
+    search_fields = ("name",)

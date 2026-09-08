@@ -1,16 +1,35 @@
+import uuid
+
+from django.db.models import Func
 from rgs_django_utils.database import dj_extended_models as models
 
 from ._sections import section_maps
 
 
+def _gen_random_uuid() -> Func:
+    """Bouwt de db_default-expressie ``gen_random_uuid()`` (Postgres, spec §4).
+
+    ``Func(function=...)`` legt de functienaam alleen vast in ``extra`` (gebruikt
+    door ``as_sql``), niet als attribuut. We zetten ``.function`` hier expliciet
+    zodat de default ook via dat attribuut inspecteerbaar is (bewaakt door
+    ``tests/test_spatial_kleurenset.py::test_migratie_0007_zet_db_default_gen_random_uuid``).
+    """
+    func = Func(function="gen_random_uuid")
+    func.function = "gen_random_uuid"
+    return func
+
+
 class SpatialStyle(models.Model):
     """Mapbox stijl voor gebruik in lagen."""
 
-    # Expliciet gedeclareerd (matcht de impliciete PK) zodat 'auth' insert mag:
-    # de upsert vanuit de frontend conflicteert op spatial_style_pkey en stuurt
-    # 'id' mee, dus 'id' moet in de insert_input zitten.
-    id = models.BigAutoField(
+    # Uuid-pk (spec §4): Django-default voor de ORM, DB-default voor Hasura-inserts
+    # zonder id. De frontend-upsert conflicteert op spatial_style_pkey en stuurt
+    # zelf een uuid mee, dus 'id' moet in de insert_input zitten (auth="is-").
+    id = models.UUIDField(
         primary_key=True,
+        default=uuid.uuid4,
+        db_default=_gen_random_uuid(),
+        editable=False,
         config=models.Config(permissions=models.FPerm(auth="is-")),
     )
     name = models.TextStringField(
