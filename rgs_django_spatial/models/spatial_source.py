@@ -120,7 +120,21 @@ class SpatialSource(models.Model):
         blank=True,
         config=models.Config(
             doc_short="Configuratie van de authenticatie voor de kaartbron, indien nodig",
-            permissions=models.FPerm("---", auth="isu"),
+            # Dit veld draagt het geheim zelf (wachtwoord/token/sleutel voor de
+            # kaartbron), niet alleen metadata erover -- anders dan
+            # source_config (url/typename/upstream, geen credentials) en
+            # authentication_type (alleen het type, geen waarde). `auth` was
+            # hier "isu": elke ingelogde gebruiker, van elke organisatie, kon
+            # dus alle kaartbron-credentials van alle organisaties lezen
+            # (I-N2, eindreview 2026-09-13-rechtenmodel-en-organisatie-
+            # scoping). Alleen org_adm (en staf hoger in de rolketen via
+            # PERMISSION_TREE: sys_adm/dev/dev_man) mag dit veld nog lezen en
+            # schrijven -- dezelfde rol die de tabel al mag muteren
+            # (get_permissions() hieronder), dus dit versmalt geen bestaande
+            # workflow: wie een kaartbron al mocht aanmaken/wijzigen kon de
+            # authenticatieconfiguratie ook al schrijven, alleen niet apart
+            # afgeschermd bij het lezen.
+            permissions=models.FPerm("---", org_adm="isu"),
         ),
     )
 
