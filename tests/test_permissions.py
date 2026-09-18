@@ -103,3 +103,48 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
         self.assertIsNone(perms["org_adm"]["insert"])
         self.assertIsNone(perms["org_adm"]["update"])
         self.assertIsNone(perms["org_adm"]["delete"])
+
+
+@override_settings(PERMISSION_TREE=TEST_TREE)
+class TestSpatialSourceAuthenticationConfigIsSecret(SimpleTestCase):
+    """``authentication_config`` draagt het credential zelf, niet alleen metadata.
+
+    Dekt I-N2 (eindreview 2026-09-13-rechtenmodel-en-organisatie-scoping,
+    fixronde A3): tot deze test was het veld ``FPerm("---", auth="isu")`` net
+    als elk ander veld op ``SpatialSource``, waardoor élke ingelogde
+    gebruiker -- van elke organisatie, met of zonder lidmaatschap -- de
+    authenticatiegegevens van álle kaartbronnen kon lezen via een gewone
+    ``select`` op ``spatial_source``. Alleen ``org_adm`` (en staf hoger in de
+    keten) mag het veld nog lezen of schrijven; dat is dezelfde rol die de
+    rij zelf al mag muteren (``get_permissions()``), dus dit versmalt geen
+    bestaande workflow. ``source_config`` (url/upstream, geen credentials) en
+    ``authentication_type`` (alleen het type) blijven bewust wel op
+    ``auth="isu"`` staan -- die twee zijn negatieve controles hieronder.
+    """
+
+    def setUp(self):
+        self.helper = PermissionHelper()
+
+    def test_org_adm_en_staf_mogen_het_geheim_lezen_en_schrijven(self):
+        field_perms = self.helper.get_rol_field_permissions(SpatialSource)["authentication_config"]
+        for role in ("org_adm", "sys_adm", "dev", "dev_man"):
+            with self.subTest(role=role):
+                self.assertTrue(field_perms[role]["select"], f"{role} moet authentication_config mogen lezen")
+                self.assertTrue(field_perms[role]["insert"], f"{role} moet authentication_config mogen zetten")
+                self.assertTrue(field_perms[role]["update"], f"{role} moet authentication_config mogen wijzigen")
+
+    def test_gewone_rollen_mogen_het_geheim_niet_lezen(self):
+        """auth/org_mem/org_uman: wel lid, geen beheerder -- geen toegang tot het geheim."""
+        field_perms = self.helper.get_rol_field_permissions(SpatialSource)["authentication_config"]
+        for role in ("public", "auth", "org_mem", "org_uman"):
+            with self.subTest(role=role):
+                self.assertFalse(field_perms[role]["select"], f"{role} mag authentication_config niet lezen")
+                self.assertFalse(field_perms[role]["insert"], f"{role} mag authentication_config niet zetten")
+                self.assertFalse(field_perms[role]["update"], f"{role} mag authentication_config niet wijzigen")
+
+    def test_niet_geheime_velden_blijven_voor_elke_ingelogde_gebruiker_leesbaar(self):
+        """Negatieve controle: source_config en authentication_type zijn geen geheim."""
+        field_perms = self.helper.get_rol_field_permissions(SpatialSource)
+        for field in ("source_config", "authentication_type_id"):
+            with self.subTest(field=field):
+                self.assertTrue(field_perms[field]["auth"]["select"], f"{field} moet leesbaar blijven voor auth")
