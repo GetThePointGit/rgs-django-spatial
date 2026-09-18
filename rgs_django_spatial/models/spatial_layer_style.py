@@ -1,6 +1,78 @@
+import re
+from collections.abc import Iterable
+
+from django.core.exceptions import ValidationError
 from rgs_django_utils.database import dj_extended_models as models
 
 from ._sections import section_maps
+
+_MASKER = re.compile(r"[A-Z]+")
+
+
+def normaliseer_masker(waarde: str | None) -> str | None:
+    """Maak een modulemasker schoon: witruimte weg, leeg wordt ``None``.
+
+    Parameters
+    ----------
+    waarde : str or None
+        Ruwe invoer (uit een formulier, Hasura of de seed).
+
+    Returns:
+    -------
+    str or None
+        Het masker zonder omringende witruimte, of ``None`` als er niets overblijft.
+    """
+    if waarde is None:
+        return None
+    waarde = waarde.strip()
+    return waarde or None
+
+
+def valideer_module_velden(
+    modules: str | None,
+    standaard_in: str | None,
+    andere_standaard_in: Iterable[str | None],
+) -> dict[str, list[str]]:
+    """Toets ``modules`` en ``standaard_in`` van één stijlkoppeling.
+
+    Parameters
+    ----------
+    modules : str or None
+        Letters waarin de stijl kiesbaar is; ``None`` = alle modules.
+    standaard_in : str or None
+        Letters waarin de stijl voorgeselecteerd is.
+    andere_standaard_in : iterable of str or None
+        ``standaard_in`` van de andere koppelingen op dezelfde laag.
+
+    Returns:
+    -------
+    dict of str to list of str
+        Foutmeldingen per veld, in de vorm van ``ValidationError.message_dict``.
+        Leeg betekent geldig.
+    """
+    fouten: dict[str, list[str]] = {}
+    for veld, waarde in (("modules", modules), ("standaard_in", standaard_in)):
+        if waarde is None:
+            continue
+        if not _MASKER.fullmatch(waarde):
+            fouten[veld] = ["Alleen hoofdletters A-Z, zonder spaties."]
+        elif len(set(waarde)) != len(waarde):
+            fouten[veld] = ["Elke letter hoogstens één keer."]
+    if fouten or standaard_in is None:
+        return fouten
+
+    if modules is not None:
+        buiten = "".join(letter for letter in standaard_in if letter not in modules)
+        if buiten:
+            return {"standaard_in": [f"Standaard in {buiten}, maar daar niet beschikbaar (modules={modules})."]}
+
+    bezet = set()
+    for andere in andere_standaard_in:
+        bezet.update(andere or "")
+    dubbel = [letter for letter in standaard_in if letter in bezet]
+    if dubbel:
+        return {"standaard_in": [f"Deze kaartlaag heeft al een standaardstijl voor {', '.join(dubbel)}."]}
+    return {}
 
 
 class SpatialLayerStyle(models.Model):
@@ -66,6 +138,25 @@ class SpatialLayerStyle(models.Model):
         ),
     )
 
+    modules = models.TextStringField(
+        verbose_name="modules",
+        null=True,
+        blank=True,
+        config=models.Config(
+            doc_short="Moduleletters waarin deze stijl beschikbaar is (bv. 'DP'); leeg = alle modules",
+            permissions=models.FPerm("---", auth="isu"),
+        ),
+    )
+    standaard_in = models.TextStringField(
+        verbose_name="standaard in",
+        null=True,
+        blank=True,
+        config=models.Config(
+            doc_short="Moduleletters waarin deze stijl voorgeselecteerd is; per laag hoogstens één stijl per letter",
+            permissions=models.FPerm("---", auth="isu"),
+        ),
+    )
+
     class Meta:
         db_table = "spatial_layer_style"
         verbose_name = "kaartlaag stijl"
@@ -83,6 +174,55 @@ class SpatialLayerStyle(models.Model):
         section = section_maps
         order = 6
         modules = "*"
+
+    def _andere_standaard_in(self) -> list[str | None]:
+        """Geef ``standaard_in`` van de andere koppelingen op dezelfde laag.
+
+        Returns:
+        -------
+        list of str or None
+            Eén waarde per andere koppeling; ``None`` als die nergens standaard is.
+        """
+        return list(
+            SpatialLayerStyle.objects.filter(layer_id=self.layer_id)
+            .exclude(pk=self.pk)
+            .values_list("standaard_in", flat=True)
+        )
+
+    def _valideer_modules(self) -> None:
+        """Normaliseer en toets de modulevelden.
+
+        Raises:
+        ------
+        django.core.exceptions.ValidationError
+            Met de meldingen per veld uit :func:`valideer_module_velden`.
+        """
+        self.modules = normaliseer_masker(self.modules)
+        self.standaard_in = normaliseer_masker(self.standaard_in)
+        andere = self._andere_standaard_in() if self.standaard_in else []
+        fouten = valideer_module_velden(self.modules, self.standaard_in, andere)
+        if fouten:
+            raise ValidationError(fouten)
+
+    def clean(self):
+        """Modelvalidatie inclusief de modulevelden (admin/formulieren)."""
+        super().clean()
+        self._valideer_modules()
+
+    def save(self, *args, **kwargs):
+        """Sla op na validatie van de modulevelden.
+
+        Ook ``update_or_create`` (de seed) komt hier langs. Hasura niet: die
+        schrijft rechtstreeks in de database, dus de beheer-UI bewaakt de
+        één-standaard-per-letter-regel zelf.
+
+        Parameters
+        ----------
+        *args, **kwargs
+            Doorgegeven aan :meth:`django.db.models.Model.save`.
+        """
+        self._valideer_modules()
+        super().save(*args, **kwargs)
 
     @classmethod
     def get_permissions(cls):
