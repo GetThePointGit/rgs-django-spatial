@@ -7,6 +7,30 @@ from rgs_django_utils.database import dj_extended_models as models
 from ._sections import section_maps
 
 _MASKER = re.compile(r"[A-Z]+")
+_ONBEKEND_TEKEN = re.compile(r"[^A-Za-z]")
+
+
+def _hoofdletter_hint(waarde: str) -> str | None:
+    """Geef een hint als ``waarde`` alleen ongeldig is door kleine letters.
+
+    Parameters
+    ----------
+    waarde : str
+        De ruwe invoer van het veld ``modules`` of ``standaard_in``.
+
+    Returns:
+    -------
+    str or None
+        Een melding die de bijbehorende hoofdletters voorstelt, of ``None``
+        als ``waarde`` ook tekens bevat die geen letter zijn (die tekens
+        krijgen de generieke melding).
+    """
+    if _ONBEKEND_TEKEN.search(waarde):
+        return None
+    kleine_letters = sorted({letter.upper() for letter in waarde if letter.islower()})
+    if not kleine_letters:
+        return None
+    return f"Gebruik hoofdletters: {''.join(kleine_letters)}."
 
 
 def normaliseer_masker(waarde: str | None) -> str | None:
@@ -55,7 +79,8 @@ def valideer_module_velden(
         if waarde is None:
             continue
         if not _MASKER.fullmatch(waarde):
-            fouten[veld] = ["Alleen hoofdletters A-Z, zonder spaties."]
+            hint = _hoofdletter_hint(waarde)
+            fouten[veld] = [hint] if hint else ["Alleen hoofdletters A-Z, zonder spaties."]
         elif len(set(waarde)) != len(waarde):
             fouten[veld] = ["Elke letter hoogstens één keer."]
     if fouten or standaard_in is None:
