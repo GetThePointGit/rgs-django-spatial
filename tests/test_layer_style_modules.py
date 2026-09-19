@@ -37,8 +37,23 @@ def test_geldige_combinaties(modules, standaard_in, andere):
     assert valideer_module_velden(modules, standaard_in, andere) == {}
 
 
-@pytest.mark.parametrize("waarde", ["dp", "D P", "D1"])
+@pytest.mark.parametrize("waarde", ["D P", "D1"])
 def test_alleen_hoofdletters(waarde):
+    assert valideer_module_velden(waarde, None, []) == {"modules": ["Alleen hoofdletters A-Z, zonder spaties."]}
+    assert valideer_module_velden(None, waarde, []) == {"standaard_in": ["Alleen hoofdletters A-Z, zonder spaties."]}
+
+
+def test_kleine_letters_geven_hoofdletter_hint():
+    assert valideer_module_velden("dp", None, []) == {"modules": ["Gebruik hoofdletters: DP."]}
+    assert valideer_module_velden(None, "dp", []) == {"standaard_in": ["Gebruik hoofdletters: DP."]}
+
+
+def test_kleine_letters_gemengd_met_hoofdletters_meldt_alleen_de_kleine():
+    assert valideer_module_velden("Dp", None, []) == {"modules": ["Gebruik hoofdletters: P."]}
+
+
+@pytest.mark.parametrize("waarde", ["dp1", "d p"])
+def test_kleine_letters_gemengd_met_onbekende_tekens_geeft_generieke_melding(waarde):
     assert valideer_module_velden(waarde, None, []) == {"modules": ["Alleen hoofdletters A-Z, zonder spaties."]}
     assert valideer_module_velden(None, waarde, []) == {"standaard_in": ["Alleen hoofdletters A-Z, zonder spaties."]}
 
