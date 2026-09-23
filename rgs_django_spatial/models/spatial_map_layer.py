@@ -1,5 +1,6 @@
 from rgs_django_utils.database import dj_extended_models as models
 
+from ._scope import ORG_SCOPE_FILTER, scoped_table_permissions
 from ._sections import section_maps
 
 
@@ -113,20 +114,6 @@ class SpatialMapLayer(models.Model):
 
     @classmethod
     def get_permissions(cls):
-        # Mutaties zijn beheer: alleen org_adm (en staf hoger in de rolketen
-        # sys_adm/dev/dev_man) mag kaart-kaartlaag-koppelingen
-        # aanmaken/wijzigen/verwijderen. `auth` behoudt select.
-        # Zie GetThePointGit/rgs-django-spatial#1.
-        no_filt = {}
-
-        return models.TPerm(
-            public=None,
-            auth={
-                "select": no_filt,
-            },
-            org_adm={
-                "insert": no_filt,
-                "update": no_filt,
-                "delete": no_filt,
-            },
-        )
+        # Volgt de scope van de laag: org_adm muteert alleen kaart-kaartlaag-koppelingen van lagen
+        # van de actieve organisatie, staf alles (waterworks-ui#219).
+        return scoped_table_permissions({"layer": ORG_SCOPE_FILTER})

@@ -1,6 +1,12 @@
 from rgs_django_utils.database import dj_extended_models as models
-from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
+from ._scope import (
+    ORG_SCOPE_FILTER,
+    access_id_field,
+    access_through_field,
+    scoped_table_permissions,
+    unique_name_per_scope,
+)
 from ._sections import section_maps
 
 #
@@ -65,9 +71,8 @@ class SpatialLayer(models.Model):
     )
     name = models.TextStringField(
         verbose_name="naam",
-        unique=True,
         config=models.Config(
-            doc_short="Naam van de kaartbron",
+            doc_short="Naam van de kaartlaag (uniek binnen de scope)",
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
@@ -90,24 +95,8 @@ class SpatialLayer(models.Model):
         ),
     )
 
-    access_through = models.ForeignKey(
-        EnumAccessThrough,
-        on_delete=models.PROTECT,
-        verbose_name="toegang via",
-        config=models.Config(
-            doc_short="Toegang via (publiek, organisatie, project)",
-            permissions=models.FPerm("---", auth="isu"),
-        ),
-    )
-    access_id = models.IntegerField(
-        verbose_name="toegang id",
-        null=True,
-        blank=True,
-        config=models.Config(
-            doc_short="ID van de organisatie of het project waartoe deze kaartlaag behoort, indien van toepassing",
-            permissions=models.FPerm("---", auth="isu"),
-        ),
-    )
+    access_through = access_through_field("Toegang via: applicatiebreed (authenticated) of organisatie")
+    access_id = access_id_field("ID van de organisatie waartoe deze kaartlaag behoort (leeg = applicatiebreed)")
     # todo: link for access by generic relation in view?
 
     source = models.ForeignKey(
@@ -201,6 +190,7 @@ class SpatialLayer(models.Model):
         db_table = "spatial_layer"
         verbose_name = "kaartlaag"
         verbose_name_plural = "kaartlagen"
+        constraints = [unique_name_per_scope("spatial_layer")]
 
     class TableDescription:
         section = section_maps
@@ -212,21 +202,6 @@ class SpatialLayer(models.Model):
 
     @classmethod
     def get_permissions(cls):
-        # Mutaties (insert/update/delete) zijn beheer, geen leeswerk: alleen
-        # org_adm (en staf hoger in de rolketen sys_adm/dev/dev_man) mag
-        # kaartlagen aanmaken/wijzigen/verwijderen. `auth` behoudt select,
-        # zodat elke ingelogde gebruiker kaartlagen kan bekijken.
-        # Zie GetThePointGit/rgs-django-spatial#1.
-        no_filt = {}
-
-        return models.TPerm(
-            public=None,
-            auth={
-                "select": no_filt,
-            },
-            org_adm={
-                "insert": no_filt,
-                "update": no_filt,
-                "delete": no_filt,
-            },
-        )
+        # org_adm muteert alleen lagen van de actieve organisatie, staf alles;
+        # lezen blijft breed (waterworks-ui#219, zie _scope.py).
+        return scoped_table_permissions(ORG_SCOPE_FILTER)
