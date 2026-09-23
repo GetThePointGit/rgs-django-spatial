@@ -29,7 +29,10 @@ class SpatialMapLayer(models.Model):
         verbose_name="laag",
         config=models.Config(
             doc_short="De kaartlaag die aan de kaart is toegevoegd",
-            permissions=models.FPerm("---", auth="isu"),
+            # Alleen bij aanmaken: Hasura kan geen update-check genereren, dus
+            # omhangen naar een laag buiten de eigen scope moet op kolomniveau
+            # dicht (waterworks-ui#219). Staf mag het wel.
+            permissions=models.FPerm("---", auth="is-", sys_adm="isu"),
         ),
     )
 

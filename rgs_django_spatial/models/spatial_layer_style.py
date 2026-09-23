@@ -116,7 +116,10 @@ class SpatialLayerStyle(models.Model):
         related_name="styles",
         config=models.Config(
             doc_short="Kaartlaag waartoe deze stijl behoort",
-            permissions=models.FPerm("---", auth="isu"),
+            # Alleen bij aanmaken: Hasura kan geen update-check genereren, dus
+            # omhangen naar een laag buiten de eigen scope moet op kolomniveau
+            # dicht (waterworks-ui#219). Staf mag het wel.
+            permissions=models.FPerm("---", auth="is-", sys_adm="isu"),
         ),
     )
     style = models.ForeignKey(

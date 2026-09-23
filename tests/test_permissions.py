@@ -219,3 +219,14 @@ class TestScopeKolommen(SimpleTestCase):
                 veld = model._meta.get_field("access_through")
                 self.assertEqual(veld.default, "authenticated")
                 self.assertEqual(veld.db_default, "authenticated")
+
+    def test_koppeling_niet_omhangen_naar_een_andere_laag(self):
+        # Hasura krijgt geen update-check mee, dus org_adm mag layer_id alleen
+        # bij aanmaken zetten; anders hangt hij een eigen koppeling om naar een
+        # applicatiebrede laag of die van een andere organisatie.
+        for model in (SpatialMapLayer, SpatialLayerStyle):
+            with self.subTest(model=model.__name__):
+                perms = self.helper.get_rol_field_permissions(model)["layer_id"]
+                self.assertTrue(perms["org_adm"]["insert"])
+                self.assertFalse(perms["org_adm"]["update"])
+                self.assertTrue(perms["sys_adm"]["update"])
