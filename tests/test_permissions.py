@@ -1,11 +1,12 @@
-"""Tabel-permissies van de spatial_*-modellen: mutaties alleen voor org_adm.
+"""Tabel-permissies van de spatial_*-modellen.
 
-Dekt GetThePointGit/rgs-django-spatial#1 / GetThePointGit/waterworks#376:
-`select` blijft voor elke ingelogde gebruiker (`auth`) beschikbaar, maar
-insert/update/delete zijn verplaatst naar `org_adm` (en erven dus door naar
-staf hoger in de rolketen: sys_adm -> dev -> dev_man). `SpatialMap` is in dit
-ticket niet aangepast (blijft select-only voor `auth`) en dient als
-negatieve controle.
+Dekt GetThePointGit/rgs-django-spatial#1 / GetThePointGit/waterworks#376 en
+de organisatie-scope uit GetThePointGit/waterworks-ui#219: `select` blijft
+voor elke ingelogde gebruiker (`auth`) beschikbaar; insert/update/delete
+zijn voor `org_adm`, beperkt tot rijen van de actieve organisatie (laag, bron,
+thema en de koppeltabellen via hun laag). Staf (sys_adm -> dev -> dev_man)
+heeft een eigen regel zonder rijfilter. `SpatialMap` is niet aangepast
+(blijft select-only voor `auth`) en dient als negatieve controle.
 """
 
 from django.test import SimpleTestCase, override_settings
@@ -21,6 +22,7 @@ from rgs_django_spatial.models import (
     SpatialStyle,
     SpatialTheme,
 )
+from rgs_django_spatial.models._scope import ORG_SCOPE_FILTER
 
 # Zelfde rolketen als settings.PERMISSION_TREE in waterworks (verkort tot de
 # takken die hier relevant zijn): auth -> org_mem -> org_uman -> org_adm ->
@@ -46,6 +48,14 @@ MUTATION_MODELS = [
     SpatialKleurenset,
 ]
 
+SCOPE_FILTERS = {
+    SpatialLayer: ORG_SCOPE_FILTER,
+    SpatialSource: ORG_SCOPE_FILTER,
+    SpatialTheme: ORG_SCOPE_FILTER,
+    SpatialMapLayer: {"layer": ORG_SCOPE_FILTER},
+    SpatialLayerStyle: {"layer": ORG_SCOPE_FILTER},
+}
+
 
 @override_settings(PERMISSION_TREE=TEST_TREE)
 class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
@@ -63,21 +73,46 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
                 self.assertIsNone(perms["auth"]["update"], f"{model.__name__}: auth mag niet meer update")
                 self.assertIsNone(perms["auth"]["delete"], f"{model.__name__}: auth mag niet meer delete")
 
-    def test_org_adm_gets_full_crud(self):
+    def test_org_adm_muteert_alleen_binnen_de_eigen_organisatie(self):
+        """Laag/bron/thema: rijfilter op de actieve organisatie (waterworks-ui#219)."""
+        for model, filt in SCOPE_FILTERS.items():
+            with self.subTest(model=model.__name__):
+                perms = self.helper.get_rol_table_permissions(model)
+                self.assertEqual(perms["org_adm"]["insert"], filt)
+                self.assertEqual(perms["org_adm"]["update"], filt)
+                self.assertEqual(perms["org_adm"]["delete"], filt)
+
+    def test_org_adm_select_blijft_breed_behalve_bij_bronnen(self):
+        """Lezen is nog niet afgeschermd (waterworks#548).
+
+        Alleen de org_adm-select op spatial_source is beperkt, omdat org_adm de
+        credentials mag lezen.
+        """
         for model in MUTATION_MODELS:
             with self.subTest(model=model.__name__):
                 perms = self.helper.get_rol_table_permissions(model)
-                self.assertEqual(perms["org_adm"]["select"], {}, f"{model.__name__}: org_adm erft select van auth")
-                self.assertEqual(perms["org_adm"]["insert"], {}, f"{model.__name__}: org_adm moet mogen inserten")
-                self.assertEqual(perms["org_adm"]["update"], {}, f"{model.__name__}: org_adm moet mogen updaten")
-                self.assertEqual(perms["org_adm"]["delete"], {}, f"{model.__name__}: org_adm moet mogen deleten")
+                verwacht = ORG_SCOPE_FILTER if model is SpatialSource else {}
+                self.assertEqual(perms["org_adm"]["select"], verwacht)
 
-    def test_staff_roles_inherit_org_adm_mutation_rights(self):
-        """sys_adm/dev/dev_man erven mutatierechten via de rolketen naar org_adm."""
+    def test_org_adm_muteert_ongebonden_stijlen_en_kleurensets_vrij(self):
+        """Stijlen en kleurensets hebben nog geen scope (vervolgticket waterworks#548)."""
+        for model in (SpatialStyle, SpatialKleurenset):
+            with self.subTest(model=model.__name__):
+                perms = self.helper.get_rol_table_permissions(model)
+                self.assertEqual(perms["org_adm"]["insert"], {})
+                self.assertEqual(perms["org_adm"]["update"], {})
+                self.assertEqual(perms["org_adm"]["delete"], {})
+
+    def test_staf_muteert_alles_zonder_rijfilter(self):
+        """sys_adm/dev/dev_man: expliciete regel, erft het org_adm-filter niet.
+
+        Staf heeft vaak geen x-hasura-org-id.
+        """
         for model in MUTATION_MODELS:
             for role in ("sys_adm", "dev", "dev_man"):
                 with self.subTest(model=model.__name__, role=role):
                     perms = self.helper.get_rol_table_permissions(model)
+                    self.assertEqual(perms[role]["select"], {})
                     self.assertEqual(perms[role]["insert"], {})
                     self.assertEqual(perms[role]["update"], {})
                     self.assertEqual(perms[role]["delete"], {})
@@ -148,3 +183,50 @@ class TestSpatialSourceAuthenticationConfigIsSecret(SimpleTestCase):
         for field in ("source_config", "authentication_type_id"):
             with self.subTest(field=field):
                 self.assertTrue(field_perms[field]["auth"]["select"], f"{field} moet leesbaar blijven voor auth")
+
+
+@override_settings(PERMISSION_TREE=TEST_TREE)
+class TestScopeKolommen(SimpleTestCase):
+    """access_through/access_id: org_adm zet ze bij aanmaken, alleen staf wijzigt ze."""
+
+    def setUp(self):
+        self.helper = PermissionHelper()
+
+    def test_rechten_op_scopekolommen(self):
+        for model in (SpatialLayer, SpatialSource, SpatialTheme):
+            field_perms = self.helper.get_rol_field_permissions(model)
+            for kolom in ("access_through_id", "access_id"):
+                with self.subTest(model=model.__name__, kolom=kolom):
+                    perms = field_perms[kolom]
+                    self.assertTrue(perms["auth"]["select"])
+                    self.assertFalse(perms["auth"]["insert"])
+                    self.assertTrue(perms["org_adm"]["insert"])
+                    self.assertFalse(perms["org_adm"]["update"], "org_adm mag de scope niet omzetten")
+                    self.assertTrue(perms["sys_adm"]["update"])
+                    self.assertNotIn("preset_insert", perms["org_adm"])
+
+    def test_naam_uniek_per_scope(self):
+        for model in (SpatialLayer, SpatialSource, SpatialTheme):
+            with self.subTest(model=model.__name__):
+                self.assertFalse(model._meta.get_field("name").unique)
+                constraint = next(c for c in model._meta.constraints if c.name.endswith("_name_per_scope"))
+                self.assertEqual(tuple(constraint.fields), ("name", "access_through", "access_id"))
+                self.assertIs(constraint.nulls_distinct, False)
+
+    def test_scope_default_is_applicatiebreed(self):
+        for model in (SpatialLayer, SpatialSource, SpatialTheme):
+            with self.subTest(model=model.__name__):
+                veld = model._meta.get_field("access_through")
+                self.assertEqual(veld.default, "authenticated")
+                self.assertEqual(veld.db_default, "authenticated")
+
+    def test_koppeling_niet_omhangen_naar_een_andere_laag(self):
+        # Hasura krijgt geen update-check mee, dus org_adm mag layer_id alleen
+        # bij aanmaken zetten; anders hangt hij een eigen koppeling om naar een
+        # applicatiebrede laag of die van een andere organisatie.
+        for model in (SpatialMapLayer, SpatialLayerStyle):
+            with self.subTest(model=model.__name__):
+                perms = self.helper.get_rol_field_permissions(model)["layer_id"]
+                self.assertTrue(perms["org_adm"]["insert"])
+                self.assertFalse(perms["org_adm"]["update"])
+                self.assertTrue(perms["sys_adm"]["update"])
