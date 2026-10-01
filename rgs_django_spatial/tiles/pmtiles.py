@@ -16,7 +16,7 @@ gdal.UseExceptions()
 class GpkgInfo:
     """Samenvatting van de eerste laag in een GeoPackage.
 
-    Attributes:
+    Attributes
     ----------
     layer_name : str
         Naam van de (eerste) laag in het GeoPackage; tevens de MVT source-layer.
@@ -57,7 +57,7 @@ def inspect_layers(path: str) -> list[dict]:
     path : str
         Pad naar het vectorbestand (bv. ``.gpkg`` of ``.geojson``).
 
-    Returns:
+    Returns
     -------
     list of dict
         Per laag ``{"name": str, "geometry_type": str, "feature_count": int, "fields": [str, ...]}``.
@@ -96,12 +96,12 @@ def inspect_vector(path: str, layer_name: str | None = None) -> GpkgInfo:
     layer_name : str or None, optional
         Naam van de te lezen laag. Als ``None``, wordt de eerste laag gebruikt.
 
-    Returns:
+    Returns
     -------
     GpkgInfo
         Laaginfo met naam, geometrietype, aantal features en WGS84-extent.
 
-    Raises:
+    Raises
     ------
     ValueError
         Als de bron geen leesbare vectorlaag bevat, of ``layer_name`` niet
@@ -156,13 +156,13 @@ def distinct_veldwaarden(
         Begrens het aantal gescande features (voor trage remote WFS/URL-bronnen);
         ``None`` = alle features scannen.
 
-    Returns:
+    Returns
     -------
     tuple
         ``(waarden, afgekapt)`` — de eerste ``limiet`` unieke niet-lege waarden en
         of er meer dan ``limiet`` unieke waarden waren.
 
-    Raises:
+    Raises
     ------
     ValueError
         Als de bron niet leesbaar is, de laag niet bestaat of het veld ontbreekt.

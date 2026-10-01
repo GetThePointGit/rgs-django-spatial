@@ -16,7 +16,7 @@ def wil_migreren(default_style, bestaande_stijl_count: int) -> bool:
 def zorg_voor_standaard_stijl(map_layer) -> bool:
     """Maak (idempotent) een standaard-stijlrecord voor deze kaartlaag.
 
-    Returns:
+    Returns
     -------
     bool
         True als er een record is aangemaakt.

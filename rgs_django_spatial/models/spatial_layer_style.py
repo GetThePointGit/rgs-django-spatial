@@ -19,7 +19,7 @@ def _hoofdletter_hint(waarde: str) -> str | None:
     waarde : str
         De ruwe invoer van het veld ``modules`` of ``standaard_in``.
 
-    Returns:
+    Returns
     -------
     str or None
         Een melding die de bijbehorende hoofdletters voorstelt, of ``None``
@@ -42,7 +42,7 @@ def normaliseer_masker(waarde: str | None) -> str | None:
     waarde : str or None
         Ruwe invoer (uit een formulier, Hasura of de seed).
 
-    Returns:
+    Returns
     -------
     str or None
         Het masker zonder omringende witruimte, of ``None`` als er niets overblijft.
@@ -69,7 +69,7 @@ def valideer_module_velden(
     andere_standaard_in : iterable of str or None
         ``standaard_in`` van de andere koppelingen op dezelfde laag.
 
-    Returns:
+    Returns
     -------
     dict of str to list of str
         Foutmeldingen per veld, in de vorm van ``ValidationError.message_dict``.
@@ -207,7 +207,7 @@ class SpatialLayerStyle(models.Model):
     def _andere_standaard_in(self) -> list[str | None]:
         """Geef ``standaard_in`` van de andere koppelingen op dezelfde laag.
 
-        Returns:
+        Returns
         -------
         list of str or None
             Eén waarde per andere koppeling; ``None`` als die nergens standaard is.
@@ -221,7 +221,7 @@ class SpatialLayerStyle(models.Model):
     def _valideer_modules(self) -> None:
         """Normaliseer en toets de modulevelden.
 
-        Raises:
+        Raises
         ------
         django.core.exceptions.ValidationError
             Met de meldingen per veld uit :func:`valideer_module_velden`.

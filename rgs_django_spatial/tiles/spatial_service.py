@@ -78,14 +78,14 @@ def spatial_tiles_key(source_id: int) -> str:
 def gdal_input_for_source(source):
     """Bepaal de GDAL-input voor een bron.
 
-    Returns:
+    Returns
     -------
     tuple
         ``(contextmanager die het GDAL-pad yieldt, optionele laagnaam)``.
         Voor een bestand-bron is dat een lokale tempkopie van ``source.file``;
         voor een WFS-bron de GDAL WFS-connectiestring (geen tempbestand).
 
-    Raises:
+    Raises
     ------
     ValueError
         Als de bron geen bruikbare input heeft.

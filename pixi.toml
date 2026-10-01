@@ -75,7 +75,7 @@ ipywidgets = "*"
 jupytext = "*"
 pre-commit = "*"
 twine = "*"
-ruff = "*"
+ruff = "==0.16.3"  # gelijk aan de lint-job in CI en waterworks
 
 # for memory profiling of tasks
 psutil = "*"

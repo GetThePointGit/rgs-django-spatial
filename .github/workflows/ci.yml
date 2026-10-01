@@ -4,6 +4,17 @@ on:
     branches: [main]
   pull_request:
 jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      # Zelfde ruff-versie als in pixi.toml (dev) en de waterworks-CI.
+      - name: Install ruff (pinned)
+        run: pipx install ruff==0.16.3
+      - name: ruff format --check
+        run: ruff format --check .
+      - name: ruff check
+        run: ruff check .
   tests:
     runs-on: ubuntu-latest
     steps:
