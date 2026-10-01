@@ -45,7 +45,9 @@ owslib = "*"
 pip = "*"
 
 [pypi-dependencies]
-django = ">=5.0"
+# Gelijk aan de consumers (waterworks, urbanworks, drainworks: Django 5.2 LTS), zodat
+# CI test wat in productie draait. De library-range staat in pyproject.toml.
+django = "==5.2.*"
 
 django-ninja = ">=1.6,<2"
 
