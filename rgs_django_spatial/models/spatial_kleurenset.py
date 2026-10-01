@@ -20,14 +20,15 @@ def _gen_random_uuid() -> Func:
 
 
 def _lege_lijst() -> list:
-    """Django-default voor ``categorieen`` (korte Returns-sectie, Google-stijl —
-    zo staat ``[tool.ruff.lint.pydocstyle] convention`` in dit project).
+    """Django-default voor ``categorieen``.
 
     Bewust een eigen functie i.p.v. ``list``: rgs_django_utils'
     install_db_defaults_and_relation_cascading() behandelt ``default is list``
     als integer-ArrayField en zet dan ``array[]::integer[]``, wat op jsonb faalt.
 
-    Returns:
+    Returns
+    -------
+    list
         Een lege lijst.
     """
     return []

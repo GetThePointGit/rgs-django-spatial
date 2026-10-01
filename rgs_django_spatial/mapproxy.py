@@ -62,7 +62,13 @@ def render_mapproxy_yaml() -> str:
 
 
 def heeft_reproject_bronnen() -> bool:
-    """True als er minstens één bron met een bruikbare upstream-config is."""
+    """Bepaal of er minstens één bron met een bruikbare upstream-config is.
+
+    Returns
+    -------
+    bool
+        ``True`` als zo'n bron bestaat.
+    """
     from rgs_django_spatial.models import SpatialSource
 
     for src in SpatialSource.objects.filter(reproject=True):

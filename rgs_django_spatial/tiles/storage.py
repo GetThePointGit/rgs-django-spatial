@@ -100,7 +100,7 @@ def read_object(key: str) -> bytes:
     kleine bestanden die door Django worden gestreamd (i.t.t. PMTiles, die de
     browser via een presigned URL rechtstreeks bij S3 ophaalt).
 
-    Raises:
+    Raises
     ------
     FileNotFoundError
         Als het object niet bestaat.
