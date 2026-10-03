@@ -1,6 +1,6 @@
 # Wijzigingen
 
-## Unreleased
+## 0.8.0 (2026-10-03)
 
 ### Toegevoegd
 - Optionele toegangsregeling voor bronnen, lagen en thema's (algemeen of van één
