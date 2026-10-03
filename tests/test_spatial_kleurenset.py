@@ -5,6 +5,7 @@ import uuid
 import pytest
 
 from rgs_django_spatial.models import SpatialKleurenset, SpatialLayerStyle, SpatialStyle
+from rgs_django_spatial.models._scope import ORG_SCOPE_FILTER
 
 
 @pytest.mark.django_db
@@ -64,7 +65,12 @@ def test_kleurenset_permissies_gelijk_aan_style():
 
     # Pin de concrete contract, niet alleen de gelijkheid met SpatialStyle.
     assert kleurenset_perms["auth"] == {"select": {}}
-    assert kleurenset_perms["org_adm"] == {"insert": {}, "update": {}, "delete": {}}
+    # urbanworks#208: schrijven is gebonden aan de eigen organisatie (was ongefilterd: {}).
+    assert kleurenset_perms["org_adm"] == {
+        "insert": ORG_SCOPE_FILTER,
+        "update": ORG_SCOPE_FILTER,
+        "delete": ORG_SCOPE_FILTER,
+    }
 
 
 def test_migratie_0007_zet_db_default_gen_random_uuid():

@@ -7,8 +7,10 @@ applicatiebreed via de DB-default, zodat er bij de invoering niets verdwijnt.
 
 Rechten (Hasura):
 
-- iedere ingelogde gebruiker (``auth``) leest alles; het afschermen van het
-  lezen volgt in een vervolgticket (waterworks#548);
+- iedere ingelogde gebruiker (``auth``) leest standaard alles. Met
+  ``SPATIAL_RESTRICT_READ = True`` in de settings van de consumer leest hij alleen
+  applicatiebrede rijen en rijen van de **actieve** organisatie
+  (:data:`LEES_SCOPE_FILTER`, urbanworks#208);
 - ``org_adm`` muteert alleen rijen van de **actieve** organisatie
   (``x-hasura-org-id``) en maakt alleen zulke rijen aan. De client stuurt de
   scope mee; de insert-check dwingt hem af. Een preset kan hier niet: presets
@@ -19,6 +21,7 @@ Rechten (Hasura):
   patroon als ``NoteIcon`` in waterworks).
 """
 
+from django.conf import settings
 from rgs_django_utils.database import dj_extended_models as models
 from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
@@ -28,8 +31,29 @@ ORG_SCOPE_FILTER = {
 }
 """Rijfilter: de rij hoort bij de actieve organisatie van de gebruiker."""
 
+LEES_SCOPE_FILTER = {
+    "_or": [
+        {"access_through_id": {"_eq": EnumAccessThrough.AUTHENTICATED}},
+        ORG_SCOPE_FILTER,
+    ]
+}
+"""Rijfilter om te lezen: de rij is applicatiebreed, of van de actieve organisatie."""
 
-def scoped_table_permissions(scope_filter: dict, org_adm_select: dict | None = None) -> models.TPerm:
+
+def lezen_beperkt() -> bool:
+    """Is lezen beperkt tot algemene rijen en die van de actieve organisatie?
+
+    Returns
+    -------
+    bool
+        De setting ``SPATIAL_RESTRICT_READ`` (standaard ``False``: lezen is breed).
+    """
+    return bool(getattr(settings, "SPATIAL_RESTRICT_READ", False))
+
+
+def scoped_table_permissions(
+    scope_filter: dict, org_adm_select: dict | None = None, read_filter: dict | None = None
+) -> models.TPerm:
     """Bouw de tabelpermissies voor een tabel met organisatie-scope.
 
     Parameters
@@ -41,7 +65,12 @@ def scoped_table_permissions(scope_filter: dict, org_adm_select: dict | None = N
         koppeltabellen.
     org_adm_select : dict, optional
         Afwijkend select-filter voor ``org_adm``. Standaard erft ``org_adm``
-        de brede select van ``auth``.
+        de select van ``auth``.
+    read_filter : dict, optional
+        Select-filter voor ``auth`` (en wie dat erft) als lezen beperkt is
+        (``SPATIAL_RESTRICT_READ``): :data:`LEES_SCOPE_FILTER`, of via een
+        relatie (bv. ``{"layer": LEES_SCOPE_FILTER}``) voor koppeltabellen.
+        Staf houdt een select zonder filter.
 
     Returns
     -------
@@ -54,7 +83,7 @@ def scoped_table_permissions(scope_filter: dict, org_adm_select: dict | None = N
         org_adm["select"] = org_adm_select
     return models.TPerm(
         public=None,
-        auth={"select": {}},
+        auth={"select": read_filter if (read_filter is not None and lezen_beperkt()) else {}},
         org_adm=org_adm,
         sys_adm={"select": {}, "insert": {}, "update": {}, "delete": {}},
     )

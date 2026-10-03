@@ -6,8 +6,10 @@ from typing import Optional
 from django.http import HttpRequest, HttpResponse
 from django.shortcuts import get_object_or_404
 from ninja import File, Form, Router, Schema
+from ninja.errors import HttpError
 from ninja.files import UploadedFile
 
+from rgs_django_spatial.access import get_access
 from rgs_django_spatial.tiles.ogc_capabilities import discover_layers
 from rgs_django_spatial.tiles.spatial_service import (
     build_served_geojson_for_source,
@@ -24,6 +26,72 @@ log = logging.getLogger(__name__)
 router = Router(tags=["spatial"])
 
 
+def _leesbare_bronnen(request: HttpRequest):
+    """Queryset van de bronnen die dit verzoek mag lezen.
+
+    Parameters
+    ----------
+    request : django.http.HttpRequest
+        Het verzoek.
+
+    Returns
+    -------
+    django.db.models.QuerySet
+        Alle bronnen als er geen ``SPATIAL_ACCESS_RESOLVER`` is, anders de
+        algemene en die van een leesbare eigenaar.
+    """
+    from rgs_django_spatial.models import SpatialSource
+
+    toegang = get_access(request)
+    qs = SpatialSource.objects.all()
+    return qs if toegang is None else qs.filter(toegang.lees_filter())
+
+
+def _lees_bron(request: HttpRequest, id: int):
+    """Geef een leesbare bron, of 404 (ook voor bronnen van een andere eigenaar).
+
+    Parameters
+    ----------
+    request : django.http.HttpRequest
+        Het verzoek.
+    id : int
+        Bron-id.
+
+    Returns
+    -------
+    SpatialSource
+        De bron.
+    """
+    return get_object_or_404(_leesbare_bronnen(request), id=id)
+
+
+def _schrijf_bron(request: HttpRequest, id: int):
+    """Geef een schrijfbare bron: 404 als hij onleesbaar is, 403 als hij alleen leesbaar is.
+
+    Parameters
+    ----------
+    request : django.http.HttpRequest
+        Het verzoek.
+    id : int
+        Bron-id.
+
+    Returns
+    -------
+    SpatialSource
+        De bron.
+
+    Raises
+    ------
+    ninja.errors.HttpError
+        403 als de gebruiker deze bron wel mag zien maar niet mag wijzigen.
+    """
+    obj = _lees_bron(request, id)
+    toegang = get_access(request)
+    if toegang is not None and not toegang.mag_schrijven(obj):
+        raise HttpError(403, "Onvoldoende rechten voor deze kaartbron.")
+    return obj
+
+
 class SpatialTileUrlSchema(Schema):
     source_id: int
     tiles_url: str
@@ -36,11 +104,9 @@ class ErrorResponse(Schema):
 
 @router.get("/lagen/", response=list[SpatialTileUrlSchema])
 def list_tile_urls(request: HttpRequest):
-    """Actuele (presigned) PMTiles-URL's van alle bronnen met klare tiles."""
-    from rgs_django_spatial.models import SpatialSource
-
+    """Actuele (presigned) PMTiles-URL's van de leesbare bronnen met klare tiles."""
     out = []
-    for obj in SpatialSource.objects.filter(tile_status="klaar"):
+    for obj in _leesbare_bronnen(request).filter(tile_status="klaar"):
         out.append(
             {
                 "source_id": obj.id,
@@ -83,7 +149,16 @@ def capabilities(request: HttpRequest, payload: CapabilitiesRequest):
     Server-side (browser mag externe hosts niet ophalen). Alleen ``http``/``https``
     is toegestaan als kleine SSRF-mitigatie; alle fouten worden vertaald naar een
     nette NL-melding met HTTP 400.
+
+    Met een ``SPATIAL_ACCESS_RESOLVER`` alleen voor wie ergens kaartbronnen mag
+    schrijven (403 anders): de route haalt een door de client opgegeven URL op
+    (SSRF-oppervlak), dus hij hoort bij het bronnenbeheer, niet bij elke
+    ingelogde gebruiker. De http(s)-check hieronder blokkeert geen interne
+    hosts; dat vraagt netwerkbeleid aan de consumer-kant.
     """
+    toegang = get_access(request)
+    if toegang is not None and not toegang.kan_schrijven():
+        raise HttpError(403, "Onvoldoende rechten.")
     service = (payload.service or "").lower()
     if service not in ("wms", "wfs"):
         return 400, {"error": "Kies WMS of WFS."}
@@ -120,10 +195,9 @@ def veld_waarden(request: HttpRequest, id: int, veld: str, laag: Optional[str] =
     categorie-auto-load in de stijleditor. Werkt voor bestand-, WFS- en
     remote-geojson-bronnen; remote bronnen worden gecapt op de eerste 500 features.
     """
-    from rgs_django_spatial.models import SpatialSource
     from rgs_django_spatial.tiles.pmtiles import distinct_veldwaarden
 
-    obj = get_object_or_404(SpatialSource, id=id)
+    obj = _lees_bron(request, id)
     try:
         gdal_ctx, layer_name = gdal_input_for_source(obj)
     except ValueError as e:
@@ -152,10 +226,9 @@ def velden(request: HttpRequest, id: int, laag: Optional[str] = None):
     getild zijn vóórdat die kolom bestond. Werkt voor bestand-, WFS- en
     remote-geojson-bronnen.
     """
-    from rgs_django_spatial.models import SpatialSource
     from rgs_django_spatial.tiles.pmtiles import inspect_layers
 
-    obj = get_object_or_404(SpatialSource, id=id)
+    obj = _lees_bron(request, id)
     try:
         gdal_ctx, layer_name = gdal_input_for_source(obj)
     except ValueError as e:
@@ -173,9 +246,7 @@ def velden(request: HttpRequest, id: int, laag: Optional[str] = None):
 @router.post("/{id}/upload/", response={202: None, 404: ErrorResponse, 400: ErrorResponse})
 def upload_bestand(request: HttpRequest, id: int, bestand: File[UploadedFile]):
     """Sla een .gpkg/.geojson op bij de bron en start tile-generatie."""
-    from rgs_django_spatial.models import SpatialSource
-
-    obj = get_object_or_404(SpatialSource, id=id)
+    obj = _schrijf_bron(request, id)
     naam = (bestand.name or "").lower()
     if not naam.endswith((".gpkg", ".geojson", ".json")):
         return 400, {"error": "Alleen .gpkg, .geojson of .json wordt ondersteund."}
@@ -188,9 +259,7 @@ def upload_bestand(request: HttpRequest, id: int, bestand: File[UploadedFile]):
 
 @router.post("/{id}/genereer-tiles/", response={202: None, 404: ErrorResponse, 400: ErrorResponse})
 def genereer_tiles(request: HttpRequest, id: int):
-    from rgs_django_spatial.models import SpatialSource
-
-    obj = get_object_or_404(SpatialSource, id=id)
+    obj = _schrijf_bron(request, id)
     try:
         gdal_input_for_source(obj)  # valideert dat er input is (bestand of WFS-url)
     except ValueError as e:
@@ -212,9 +281,7 @@ def upload_served_geojson(
     als GeoJSON aangeboden via /{id}/geojson. ``source_crs`` overschrijft de
     bron-CRS (bv. ``EPSG:28992``); leeg = uit het bestand lezen.
     """
-    from rgs_django_spatial.models import SpatialSource
-
-    obj = get_object_or_404(SpatialSource, id=id)
+    obj = _schrijf_bron(request, id)
     naam = (bestand.name or "").lower()
     if not naam.endswith((".geojson", ".json")):
         return 400, {"error": "Alleen .geojson of .json wordt ondersteund."}
@@ -235,7 +302,12 @@ def served_geojson(request: HttpRequest, id: int):
 
     De frontend zet ``source_config.data = /api/spatial/{id}/geojson`` (zonder
     trailing slash); de Next-proxy voegt de slash toe die deze route vereist.
+
+    Met een ``SPATIAL_ACCESS_RESOLVER`` moet de bron bestaan en leesbaar zijn
+    (404 anders); zonder resolver blijft het oude gedrag (direct uit opslag).
     """
+    if get_access(request) is not None:
+        _lees_bron(request, id)
     try:
         data = read_object(served_geojson_key(id))
     except FileNotFoundError:
@@ -247,6 +319,11 @@ def served_geojson(request: HttpRequest, id: int):
 def mapproxy_config(request: HttpRequest):
     """Gegenereerde MapProxy-config; wordt cluster-intern gepolld door de
     config-sync-sidecar in de MapProxy-pod (niet via de ingress ontsloten).
+
+    Bewust niet gefilterd op eigenaar: de sidecar heeft geen gebruiker en moet
+    de upstream van álle reproject-bronnen kennen om ze te kunnen serveren. Wie
+    deze route aan een ``api``-router hangt, moet hem dus afschermen (netwerk,
+    of een eigen view zonder token die alleen cluster-intern bereikbaar is).
     """
     from rgs_django_spatial.mapproxy import heeft_reproject_bronnen, render_mapproxy_yaml
 

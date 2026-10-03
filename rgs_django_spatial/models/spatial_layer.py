@@ -1,6 +1,7 @@
 from rgs_django_utils.database import dj_extended_models as models
 
 from ._scope import (
+    LEES_SCOPE_FILTER,
     ORG_SCOPE_FILTER,
     access_id_field,
     access_through_field,
@@ -204,4 +205,4 @@ class SpatialLayer(models.Model):
     def get_permissions(cls):
         # org_adm muteert alleen lagen van de actieve organisatie, staf alles;
         # lezen blijft breed (waterworks-ui#219, zie _scope.py).
-        return scoped_table_permissions(ORG_SCOPE_FILTER)
+        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER)

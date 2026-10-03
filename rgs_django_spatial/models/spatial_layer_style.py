@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from django.core.exceptions import ValidationError
 from rgs_django_utils.database import dj_extended_models as models
 
-from ._scope import ORG_SCOPE_FILTER, scoped_table_permissions
+from ._scope import LEES_SCOPE_FILTER, ORG_SCOPE_FILTER, scoped_table_permissions
 from ._sections import section_maps
 
 _MASKER = re.compile(r"[A-Z]+")
@@ -257,4 +257,4 @@ class SpatialLayerStyle(models.Model):
     def get_permissions(cls):
         # Volgt de scope van de laag: org_adm muteert alleen laagstijlen van lagen
         # van de actieve organisatie, staf alles (waterworks-ui#219).
-        return scoped_table_permissions({"layer": ORG_SCOPE_FILTER})
+        return scoped_table_permissions({"layer": ORG_SCOPE_FILTER}, read_filter={"layer": LEES_SCOPE_FILTER})

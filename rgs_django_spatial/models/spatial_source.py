@@ -1,6 +1,7 @@
 from rgs_django_utils.database import dj_extended_models as models
 
 from ._scope import (
+    LEES_SCOPE_FILTER,
     ORG_SCOPE_FILTER,
     access_id_field,
     access_through_field,
@@ -167,4 +168,6 @@ class SpatialSource(models.Model):
         # die authentication_config mag lezen, en zonder rijfilter zag een
         # org_adm de credentials van alle organisaties. Gewoon lezen loopt via
         # auth en blijft breed (waterworks-ui#219, zie _scope.py).
-        return scoped_table_permissions(ORG_SCOPE_FILTER, org_adm_select=ORG_SCOPE_FILTER)
+        return scoped_table_permissions(
+            ORG_SCOPE_FILTER, org_adm_select=ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER
+        )
