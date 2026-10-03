@@ -22,7 +22,7 @@ from rgs_django_spatial.models import (
     SpatialStyle,
     SpatialTheme,
 )
-from rgs_django_spatial.models._scope import ORG_SCOPE_FILTER
+from rgs_django_spatial.models._scope import LEES_SCOPE_FILTER, ORG_SCOPE_FILTER
 
 # Zelfde rolketen als settings.PERMISSION_TREE in waterworks (verkort tot de
 # takken die hier relevant zijn): auth -> org_mem -> org_uman -> org_adm ->
@@ -230,3 +230,72 @@ class TestScopeKolommen(SimpleTestCase):
                 self.assertTrue(perms["org_adm"]["insert"])
                 self.assertFalse(perms["org_adm"]["update"])
                 self.assertTrue(perms["sys_adm"]["update"])
+
+
+LEZEN_VIA_LAAG = {"layer": LEES_SCOPE_FILTER}
+LEES_FILTERS = {
+    SpatialLayer: LEES_SCOPE_FILTER,
+    SpatialSource: LEES_SCOPE_FILTER,
+    SpatialTheme: LEES_SCOPE_FILTER,
+    SpatialMapLayer: LEZEN_VIA_LAAG,
+    SpatialLayerStyle: LEZEN_VIA_LAAG,
+}
+
+
+@override_settings(PERMISSION_TREE=TEST_TREE)
+class TestLezenStandaardBreed(SimpleTestCase):
+    """Zonder ``SPATIAL_RESTRICT_READ`` blijft lezen zoals het was (waterworks)."""
+
+    def test_geen_filter_op_select(self):
+        helper = PermissionHelper()
+        for model in LEES_FILTERS:
+            with self.subTest(model=model.__name__):
+                self.assertEqual(helper.get_rol_table_permissions(model)["auth"]["select"], {})
+
+
+@override_settings(PERMISSION_TREE=TEST_TREE, SPATIAL_RESTRICT_READ=True)
+class TestLezenBeperktTotAlgemeenEnActieveOrg(SimpleTestCase):
+    """urbanworks#208: lezen = algemeen OF de actieve organisatie."""
+
+    def setUp(self):
+        self.helper = PermissionHelper()
+
+    def test_filter_is_algemeen_of_actieve_org(self):
+        self.assertEqual(
+            LEES_SCOPE_FILTER,
+            {"_or": [{"access_through_id": {"_eq": "authenticated"}}, ORG_SCOPE_FILTER]},
+        )
+
+    def test_gewone_rollen_lezen_alleen_hun_scope(self):
+        for model, filt in LEES_FILTERS.items():
+            for role in ("auth", "org_mem", "org_uman"):
+                with self.subTest(model=model.__name__, role=role):
+                    self.assertEqual(self.helper.get_rol_table_permissions(model)[role]["select"], filt)
+
+    def test_org_adm_leest_binnen_dezelfde_grens_en_bronnen_strenger(self):
+        for model, filt in LEES_FILTERS.items():
+            with self.subTest(model=model.__name__):
+                verwacht = ORG_SCOPE_FILTER if model is SpatialSource else filt
+                self.assertEqual(self.helper.get_rol_table_permissions(model)["org_adm"]["select"], verwacht)
+
+    def test_staf_leest_alles(self):
+        for model in LEES_FILTERS:
+            for role in ("sys_adm", "dev", "dev_man"):
+                with self.subTest(model=model.__name__, role=role):
+                    self.assertEqual(self.helper.get_rol_table_permissions(model)[role]["select"], {})
+
+    def test_schrijfrechten_blijven_ongewijzigd(self):
+        for model, filt in SCOPE_FILTERS.items():
+            with self.subTest(model=model.__name__):
+                perms = self.helper.get_rol_table_permissions(model)["org_adm"]
+                for actie in ("insert", "update", "delete"):
+                    self.assertEqual(perms[actie], filt)
+
+    def test_stijlen_en_kleurensets_blijven_ongefilterd(self):
+        """Scope voor stijl/kleurenset volgt in rgs-django-spatial#17."""
+        for model in (SpatialStyle, SpatialKleurenset):
+            with self.subTest(model=model.__name__):
+                self.assertEqual(self.helper.get_rol_table_permissions(model)["auth"]["select"], {})
+
+    def test_spatial_map_blijft_ongescoped(self):
+        self.assertEqual(self.helper.get_rol_table_permissions(SpatialMap)["auth"]["select"], {})
