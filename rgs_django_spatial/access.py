@@ -29,6 +29,7 @@ from django.utils.module_loading import import_string
 
 ALGEMEEN = "authenticated"
 EIGENAAR = "organisation"
+_CACHE_ATTR = "_spatial_access"
 
 
 @dataclass(frozen=True)
@@ -132,6 +133,8 @@ def get_access(request) -> SpatialAccess | None:
     -------
     SpatialAccess or None
         ``None`` als ``SPATIAL_ACCESS_RESOLVER`` niet is ingesteld (onbeperkt).
+        Het resultaat wordt per verzoek onthouden; een ``HttpError`` van de
+        resolver wordt niet onthouden en komt bij elke aanroep opnieuw.
 
     Raises
     ------
@@ -142,4 +145,8 @@ def get_access(request) -> SpatialAccess | None:
     pad = getattr(settings, "SPATIAL_ACCESS_RESOLVER", None)
     if not pad:
         return None
-    return import_string(pad)(request)
+    # Eén keer per verzoek: de resolver doet in de praktijk databasequery's en
+    # een route roept dit voor lezen én schrijven aan.
+    if not hasattr(request, _CACHE_ATTR):
+        setattr(request, _CACHE_ATTR, import_string(pad)(request))
+    return getattr(request, _CACHE_ATTR)

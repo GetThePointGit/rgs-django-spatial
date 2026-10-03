@@ -3,13 +3,6 @@ import uuid
 from django.db.models import Func
 from rgs_django_utils.database import dj_extended_models as models
 
-from ._scope import (
-    LEES_SCOPE_FILTER,
-    ORG_SCOPE_FILTER,
-    access_id_field,
-    access_through_field,
-    scoped_table_permissions,
-)
 from ._sections import section_maps
 
 
@@ -91,9 +84,6 @@ class SpatialKleurenset(models.Model):
         ),
     )
 
-    access_through = access_through_field("Toegang via: applicatiebreed (authenticated) of organisatie")
-    access_id = access_id_field("ID van de organisatie waartoe deze kleurenset behoort (leeg = applicatiebreed)")
-
     class Meta:
         db_table = "spatial_kleurenset"
         verbose_name = "kleurenset"
@@ -110,6 +100,19 @@ class SpatialKleurenset(models.Model):
 
     @classmethod
     def get_permissions(cls):
-        # org_adm muteert alleen kleurensets van de actieve organisatie, staf alles
-        # (urbanworks#208; eerder mocht elke org_adm ongefilterd schrijven).
-        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER)
+        # Mutaties zijn beheer: alleen org_adm (en staf hoger in de rolketen
+        # sys_adm/dev/dev_man) mag kleurensets aanmaken/wijzigen/verwijderen.
+        # `auth` behoudt select. Zie GetThePointGit/rgs-django-spatial#1.
+        no_filt = {}
+
+        return models.TPerm(
+            public=None,
+            auth={
+                "select": no_filt,
+            },
+            org_adm={
+                "insert": no_filt,
+                "update": no_filt,
+                "delete": no_filt,
+            },
+        )

@@ -97,3 +97,23 @@ def test_get_access_roept_de_resolver_aan():
 def test_get_access_met_kapotte_resolver_faalt_luid():
     with pytest.raises(ImportError):
         get_access(HttpRequest())
+
+
+@override_settings(SPATIAL_ACCESS_RESOLVER="test_access._telresolver")
+def test_get_access_roept_de_resolver_maar_een_keer_per_verzoek_aan():
+    _AANROEPEN.clear()
+    request = HttpRequest()
+    eerste = get_access(request)
+    assert get_access(request) is eerste
+    assert len(_AANROEPEN) == 1
+    # Een ander verzoek krijgt een eigen resolutie.
+    get_access(HttpRequest())
+    assert len(_AANROEPEN) == 2
+
+
+_AANROEPEN: list = []
+
+
+def _telresolver(request):
+    _AANROEPEN.append(request)
+    return SpatialAccess()

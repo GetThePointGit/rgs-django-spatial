@@ -38,8 +38,6 @@ TEST_TREE = {
     "dev_man": ["dev"],
 }
 
-SCOPED_MODELS = [SpatialLayer, SpatialSource, SpatialTheme, SpatialStyle, SpatialKleurenset]
-
 MUTATION_MODELS = [
     SpatialLayer,
     SpatialSource,
@@ -51,8 +49,6 @@ MUTATION_MODELS = [
 ]
 
 SCOPE_FILTERS = {
-    SpatialStyle: ORG_SCOPE_FILTER,
-    SpatialKleurenset: ORG_SCOPE_FILTER,
     SpatialLayer: ORG_SCOPE_FILTER,
     SpatialSource: ORG_SCOPE_FILTER,
     SpatialTheme: ORG_SCOPE_FILTER,
@@ -98,14 +94,14 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
                 verwacht = ORG_SCOPE_FILTER if model is SpatialSource else {}
                 self.assertEqual(perms["org_adm"]["select"], verwacht)
 
-    def test_org_adm_muteert_stijlen_en_kleurensets_alleen_binnen_de_eigen_organisatie(self):
-        """Stijlen en kleurensets hebben sinds urbanworks#208 dezelfde scope als lagen."""
+    def test_org_adm_muteert_ongebonden_stijlen_en_kleurensets_vrij(self):
+        """Stijlen en kleurensets hebben nog geen scope (vervolgticket waterworks#548)."""
         for model in (SpatialStyle, SpatialKleurenset):
             with self.subTest(model=model.__name__):
                 perms = self.helper.get_rol_table_permissions(model)
-                self.assertEqual(perms["org_adm"]["insert"], ORG_SCOPE_FILTER)
-                self.assertEqual(perms["org_adm"]["update"], ORG_SCOPE_FILTER)
-                self.assertEqual(perms["org_adm"]["delete"], ORG_SCOPE_FILTER)
+                self.assertEqual(perms["org_adm"]["insert"], {})
+                self.assertEqual(perms["org_adm"]["update"], {})
+                self.assertEqual(perms["org_adm"]["delete"], {})
 
     def test_staf_muteert_alles_zonder_rijfilter(self):
         """sys_adm/dev/dev_man: expliciete regel, erft het org_adm-filter niet.
@@ -197,7 +193,7 @@ class TestScopeKolommen(SimpleTestCase):
         self.helper = PermissionHelper()
 
     def test_rechten_op_scopekolommen(self):
-        for model in (SpatialLayer, SpatialSource, SpatialTheme, SpatialStyle, SpatialKleurenset):
+        for model in (SpatialLayer, SpatialSource, SpatialTheme):
             field_perms = self.helper.get_rol_field_permissions(model)
             for kolom in ("access_through_id", "access_id"):
                 with self.subTest(model=model.__name__, kolom=kolom):
@@ -218,7 +214,7 @@ class TestScopeKolommen(SimpleTestCase):
                 self.assertIs(constraint.nulls_distinct, False)
 
     def test_scope_default_is_applicatiebreed(self):
-        for model in (SpatialLayer, SpatialSource, SpatialTheme, SpatialStyle, SpatialKleurenset):
+        for model in (SpatialLayer, SpatialSource, SpatialTheme):
             with self.subTest(model=model.__name__):
                 veld = model._meta.get_field("access_through")
                 self.assertEqual(veld.default, "authenticated")
@@ -241,8 +237,6 @@ LEES_FILTERS = {
     SpatialLayer: LEES_SCOPE_FILTER,
     SpatialSource: LEES_SCOPE_FILTER,
     SpatialTheme: LEES_SCOPE_FILTER,
-    SpatialStyle: LEES_SCOPE_FILTER,
-    SpatialKleurenset: LEES_SCOPE_FILTER,
     SpatialMapLayer: LEZEN_VIA_LAAG,
     SpatialLayerStyle: LEZEN_VIA_LAAG,
 }
@@ -296,6 +290,12 @@ class TestLezenBeperktTotAlgemeenEnActieveOrg(SimpleTestCase):
                 perms = self.helper.get_rol_table_permissions(model)["org_adm"]
                 for actie in ("insert", "update", "delete"):
                     self.assertEqual(perms[actie], filt)
+
+    def test_stijlen_en_kleurensets_blijven_ongefilterd(self):
+        """Scope voor stijl/kleurenset volgt in rgs-django-spatial#17."""
+        for model in (SpatialStyle, SpatialKleurenset):
+            with self.subTest(model=model.__name__):
+                self.assertEqual(self.helper.get_rol_table_permissions(model)["auth"]["select"], {})
 
     def test_spatial_map_blijft_ongescoped(self):
         self.assertEqual(self.helper.get_rol_table_permissions(SpatialMap)["auth"]["select"], {})
