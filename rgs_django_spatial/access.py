@@ -46,11 +46,17 @@ class SpatialAccess:
         Eigenaars wier rijen schrijfbaar zijn.
     schrijf_algemeen : bool
         Mag de gebruiker algemene rijen wijzigen (typisch: alleen staf).
+    lees_alles : bool
+        Leest alle rijen, van elke eigenaar (typisch: staf).
+    schrijf_alles : bool
+        Schrijft elke leesbare rij, van elke eigenaar (typisch: staf).
     """
 
     lees_org_ids: frozenset[int] = frozenset()
     schrijf_org_ids: frozenset[int] = frozenset()
     schrijf_algemeen: bool = False
+    lees_alles: bool = False
+    schrijf_alles: bool = False
 
     def mag_lezen(self, obj) -> bool:
         """Mag deze rij gelezen worden?
@@ -65,7 +71,7 @@ class SpatialAccess:
         bool
             ``True`` voor algemene rijen en rijen van een leesbare eigenaar.
         """
-        if obj.access_through_id == ALGEMEEN:
+        if self.lees_alles or obj.access_through_id == ALGEMEEN:
             return True
         return obj.access_through_id == EIGENAAR and obj.access_id in self.lees_org_ids
 
@@ -85,6 +91,8 @@ class SpatialAccess:
         """
         if not self.mag_lezen(obj):
             return False
+        if self.schrijf_alles:
+            return True
         if obj.access_through_id == ALGEMEEN:
             return self.schrijf_algemeen
         return obj.access_id in self.schrijf_org_ids
@@ -97,7 +105,7 @@ class SpatialAccess:
         bool
             ``True`` bij algemeen schrijfrecht of minstens één schrijfbare eigenaar.
         """
-        return self.schrijf_algemeen or bool(self.schrijf_org_ids)
+        return self.schrijf_alles or self.schrijf_algemeen or bool(self.schrijf_org_ids)
 
     def lees_filter(self) -> Q:
         """Geef het queryset-filter voor de leesbare rijen.
@@ -105,8 +113,10 @@ class SpatialAccess:
         Returns
         -------
         django.db.models.Q
-            Algemeen, of van een leesbare eigenaar.
+            Algemeen, of van een leesbare eigenaar; bij ``lees_alles`` alles.
         """
+        if self.lees_alles:
+            return Q()
         return Q(access_through_id=ALGEMEEN) | Q(access_through_id=EIGENAAR, access_id__in=self.lees_org_ids)
 
 

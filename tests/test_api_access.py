@@ -24,6 +24,8 @@ def resolver(request):
         lees_org_ids=frozenset(data.get("lees", [])),
         schrijf_org_ids=frozenset(data.get("schrijf", [])),
         schrijf_algemeen=data.get("algemeen", False),
+        lees_alles=data.get("lees_alles", False),
+        schrijf_alles=data.get("schrijf_alles", False),
     )
 
 
@@ -182,3 +184,15 @@ def test_capabilities_zonder_resolver_blijft_open():
     fake = {"service": "wms", "version": None, "title": None, "layers": []}
     with mock.patch("rgs_django_spatial.api.discover_layers", return_value=fake):
         assert client.post("/capabilities/", json=CAP).status_code == 200
+
+
+@override_settings(SPATIAL_ACCESS_RESOLVER="test_api_access.resolver")
+def test_staf_leest_en_schrijft_bronnen_van_elke_eigenaar(bronnen):
+    staf = toegang(lees_alles=True, schrijf_alles=True)
+    with mock.patch("rgs_django_spatial.api.pmtiles_url", return_value="u"):
+        assert {r["source_id"] for r in client.get("/lagen/", **staf).json()} == {b.id for b in bronnen.values()}
+    with (
+        mock.patch("rgs_django_spatial.api.gdal_input_for_source"),
+        mock.patch("rgs_django_spatial.api.start_spatial_tile_build"),
+    ):
+        assert client.post(f"/{bronnen['org2'].id}/genereer-tiles/", **staf).status_code == 202

@@ -53,6 +53,20 @@ def test_schrijven_vereist_ook_lezen_van_dezelfde_rij():
     assert not toegang.mag_schrijven(ORG_1)
 
 
+def test_lees_alles_ziet_ook_andere_scopesoorten_en_eigenaars():
+    toegang = SpatialAccess(lees_alles=True)
+    for rij in (ALGEMEEN, ORG_1, ORG_2, ANDERS):
+        assert toegang.mag_lezen(rij)
+
+
+def test_schrijf_alles_schrijft_overal_waar_het_leest():
+    toegang = SpatialAccess(lees_alles=True, schrijf_alles=True)
+    for rij in (ALGEMEEN, ORG_1, ORG_2):
+        assert toegang.mag_schrijven(rij)
+    assert toegang.kan_schrijven()
+    assert not SpatialAccess(schrijf_alles=True).mag_schrijven(ORG_1)  # onleesbaar blijft onschrijfbaar
+
+
 def test_kan_schrijven():
     assert not SpatialAccess().kan_schrijven()
     assert SpatialAccess(schrijf_algemeen=True).kan_schrijven()
