@@ -16,7 +16,8 @@ Rechten (Hasura):
   scope mee; de insert-check dwingt hem af. Een preset kan hier niet: presets
   erven via ``PERMISSION_TREE`` door naar ``sys_adm``, en staf zonder
   organisatiecontext heeft geen ``x-hasura-org-id``;
-- staf (``sys_adm`` en hoger) muteert alles, zonder rijfilter. Een expliciete
+- staf (``sys_adm`` en hoger) muteert alles, zonder rijfilter (behalve het app-rijfilter
+  op bron en laag, zie hieronder). Een expliciete
   ``sys_adm``-regel is nodig, anders erft staf de ``org_adm``-regel (zelfde
   patroon als ``NoteIcon`` in waterworks);
 - **app-rijen** (``spatial_source`` en ``spatial_layer``, urbanworks#252) mogen door
@@ -89,7 +90,8 @@ def scoped_table_permissions(
     -------
     TPerm
         ``auth`` leest alles, ``org_adm`` muteert binnen de scope, ``sys_adm``
-        (en staf erboven) muteert alles.
+        (en staf erboven) muteert alles, zonder rijfilter; alleen bij bron en
+        laag (``app_kolom``) geldt het app-rijfilter voor update en delete.
     """
 
     def beschermd(filter_: dict) -> dict:

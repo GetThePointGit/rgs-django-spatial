@@ -180,7 +180,7 @@ def controleer_voor_opslaan(sender, instance, raw=False, **kwargs):
         return
     if _is_app_rij(instance):
         raise AppLaagBeschermd(f"{sender.__name__} {instance.pk} is een app-rij en kan niet worden gewijzigd.")
-    if instance.pk is None:
+    if instance._state.adding:
         return
     kolom = "params" if hasattr(instance, "params") else "source_config"
     opgeslagen = sender._base_manager.filter(pk=instance.pk).values_list(kolom, flat=True).first()

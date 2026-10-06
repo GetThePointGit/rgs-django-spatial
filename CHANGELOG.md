@@ -16,8 +16,16 @@
 
 ### Let op bij upgraden
 - Apps moeten hun **Hasura-metadata opnieuw genereren**: de permissiefilters zijn gewijzigd.
-- Seeds en migraties die app-rijen aanmaken, wijzigen of verwijderen moeten binnen
-  `with app_laag_onderhoud():` draaien, anders volgt `AppLaagBeschermd`.
+- Seeds en andere code die met de echte modellen app-rijen aanmaken, wijzigen of verwijderen
+  moeten binnen `with app_laag_onderhoud():` draaien, anders volgt `AppLaagBeschermd`.
+  Een migratie met `RunPython` die `apps.get_model` gebruikt werkt op historische modellen,
+  waarop de guard niet aanslaat: daar is de bypass niet nodig.
+- Bestaande app-rijen zijn direct na de upgrade beschermd. Een seed die app-rijen schrijft
+  (bv. `update_or_create`) moet dus in dezelfde deploy `app_laag_onderhoud()` krijgen.
+
+### Bekende beperking
+- Een insert via Hasura van een rij met `app_layer` blijft toegestaan (het insert-filter is
+  ongewijzigd). Zo'n rij kan daarna via Hasura niet meer worden gewijzigd of verwijderd.
 - Zonder app-rijen verandert er niets voor bestaande data. Geen nieuwe migratie.
 
 ## 0.8.0 (2026-10-03)
