@@ -12,6 +12,7 @@ heeft een eigen regel zonder rijfilter. `SpatialMap` is niet aangepast
 from django.test import SimpleTestCase, override_settings
 from rgs_django_utils.database.permission_helper import PermissionHelper
 
+from rgs_django_spatial.app_lagen import geen_app_rij
 from rgs_django_spatial.models import (
     SpatialKleurenset,
     SpatialLayer,
@@ -56,6 +57,17 @@ SCOPE_FILTERS = {
     SpatialLayerStyle: {"layer": ORG_SCOPE_FILTER},
 }
 
+# Bron en laag: app-rijen zijn voor niemand muteerbaar (urbanworks#252).
+APP_KOLOM = {SpatialSource: "source_config", SpatialLayer: "params"}
+
+
+def _met_app_filter(model, filt):
+    """Verwacht update/delete-filter: ``filt`` EN geen app-rij (alleen bron/laag)."""
+    if model not in APP_KOLOM:
+        return filt
+    app = geen_app_rij(APP_KOLOM[model])
+    return {"_and": [filt, app]} if filt else app
+
 
 @override_settings(PERMISSION_TREE=TEST_TREE)
 class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
@@ -73,14 +85,17 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
                 self.assertIsNone(perms["auth"]["update"], f"{model.__name__}: auth mag niet meer update")
                 self.assertIsNone(perms["auth"]["delete"], f"{model.__name__}: auth mag niet meer delete")
 
-    def test_org_adm_muteert_alleen_binnen_de_eigen_organisatie(self):
-        """Laag/bron/thema: rijfilter op de actieve organisatie (waterworks-ui#219)."""
+    def test_org_adm_muteert_alleen_binnen_de_eigen_organisatie_en_niet_de_app_rijen(self):
+        """Laag/bron/thema: rijfilter op de actieve organisatie (waterworks-ui#219).
+
+        Update/delete van bron en laag sluiten bovendien app-rijen uit (urbanworks#252).
+        """
         for model, filt in SCOPE_FILTERS.items():
             with self.subTest(model=model.__name__):
                 perms = self.helper.get_rol_table_permissions(model)
                 self.assertEqual(perms["org_adm"]["insert"], filt)
-                self.assertEqual(perms["org_adm"]["update"], filt)
-                self.assertEqual(perms["org_adm"]["delete"], filt)
+                self.assertEqual(perms["org_adm"]["update"], _met_app_filter(model, filt))
+                self.assertEqual(perms["org_adm"]["delete"], _met_app_filter(model, filt))
 
     def test_org_adm_select_blijft_breed_behalve_bij_bronnen(self):
         """Lezen is nog niet afgeschermd (waterworks#548).
@@ -103,10 +118,11 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
                 self.assertEqual(perms["org_adm"]["update"], {})
                 self.assertEqual(perms["org_adm"]["delete"], {})
 
-    def test_staf_muteert_alles_zonder_rijfilter(self):
+    def test_staf_muteert_alles_behalve_app_rijen_zonder_scopefilter(self):
         """sys_adm/dev/dev_man: expliciete regel, erft het org_adm-filter niet.
 
-        Staf heeft vaak geen x-hasura-org-id.
+        Staf heeft vaak geen x-hasura-org-id. Bij bron en laag geldt alleen het
+        app-rijfilter (urbanworks#252): staf muteert alles behalve app-rijen.
         """
         for model in MUTATION_MODELS:
             for role in ("sys_adm", "dev", "dev_man"):
@@ -114,8 +130,8 @@ class TestSpatialMutationPermissionsMovedToOrgAdm(SimpleTestCase):
                     perms = self.helper.get_rol_table_permissions(model)
                     self.assertEqual(perms[role]["select"], {})
                     self.assertEqual(perms[role]["insert"], {})
-                    self.assertEqual(perms[role]["update"], {})
-                    self.assertEqual(perms[role]["delete"], {})
+                    self.assertEqual(perms[role]["update"], _met_app_filter(model, {}))
+                    self.assertEqual(perms[role]["delete"], _met_app_filter(model, {}))
 
     def test_org_mem_and_org_uman_have_no_mutation_rights(self):
         """org_mem/org_uman zitten tussen auth en org_adm in en mogen niet muteren."""
@@ -285,11 +301,13 @@ class TestLezenBeperktTotAlgemeenEnActieveOrg(SimpleTestCase):
                     self.assertEqual(self.helper.get_rol_table_permissions(model)[role]["select"], {})
 
     def test_schrijfrechten_blijven_ongewijzigd(self):
+        """Insert ongewijzigd; update/delete alleen uitgebreid met het app-rijfilter."""
         for model, filt in SCOPE_FILTERS.items():
             with self.subTest(model=model.__name__):
                 perms = self.helper.get_rol_table_permissions(model)["org_adm"]
-                for actie in ("insert", "update", "delete"):
-                    self.assertEqual(perms[actie], filt)
+                self.assertEqual(perms["insert"], filt)
+                for actie in ("update", "delete"):
+                    self.assertEqual(perms[actie], _met_app_filter(model, filt))
 
     def test_stijlen_en_kleurensets_blijven_ongefilterd(self):
         """Scope voor stijl/kleurenset volgt in rgs-django-spatial#17."""

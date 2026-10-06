@@ -16,14 +16,21 @@ Rechten (Hasura):
   scope mee; de insert-check dwingt hem af. Een preset kan hier niet: presets
   erven via ``PERMISSION_TREE`` door naar ``sys_adm``, en staf zonder
   organisatiecontext heeft geen ``x-hasura-org-id``;
-- staf (``sys_adm`` en hoger) muteert alles, zonder rijfilter. Een expliciete
+- staf (``sys_adm`` en hoger) muteert alles, zonder rijfilter (behalve het app-rijfilter
+  op bron en laag, zie hieronder). Een expliciete
   ``sys_adm``-regel is nodig, anders erft staf de ``org_adm``-regel (zelfde
-  patroon als ``NoteIcon`` in waterworks).
+  patroon als ``NoteIcon`` in waterworks);
+- **app-rijen** (``spatial_source`` en ``spatial_layer``, urbanworks#252) mogen door
+  geen enkele rol, ook staf niet, worden gewijzigd of verwijderd: de update- en
+  delete-filters van elke rol krijgen er :func:`~rgs_django_spatial.app_lagen.geen_app_rij`
+  bij (zie ``app_kolom`` in :func:`scoped_table_permissions`).
 """
 
 from django.conf import settings
 from rgs_django_utils.database import dj_extended_models as models
 from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
+
+from ..app_lagen import en_geen_app_rij
 
 ORG_SCOPE_FILTER = {
     "access_through_id": {"_eq": EnumAccessThrough.ORGANISATION},
@@ -52,7 +59,10 @@ def lezen_beperkt() -> bool:
 
 
 def scoped_table_permissions(
-    scope_filter: dict, org_adm_select: dict | None = None, read_filter: dict | None = None
+    scope_filter: dict,
+    org_adm_select: dict | None = None,
+    read_filter: dict | None = None,
+    app_kolom: str | None = None,
 ) -> models.TPerm:
     """Bouw de tabelpermissies voor een tabel met organisatie-scope.
 
@@ -71,21 +81,30 @@ def scoped_table_permissions(
         (``SPATIAL_RESTRICT_READ``): :data:`LEES_SCOPE_FILTER`, of via een
         relatie (bv. ``{"layer": LEES_SCOPE_FILTER}``) voor koppeltabellen.
         Staf houdt een select zonder filter.
+    app_kolom : str, optional
+        JSON-kolom die app-rijen markeert (``source_config`` of ``params``).
+        Dan wordt "geen app-rij" met EN aan update en delete van elke rol
+        gekoppeld (ook ``sys_adm``). Select en insert blijven gelijk.
 
     Returns
     -------
     TPerm
         ``auth`` leest alles, ``org_adm`` muteert binnen de scope, ``sys_adm``
-        (en staf erboven) muteert alles.
+        (en staf erboven) muteert alles, zonder rijfilter; alleen bij bron en
+        laag (``app_kolom``) geldt het app-rijfilter voor update en delete.
     """
-    org_adm = {"insert": scope_filter, "update": scope_filter, "delete": scope_filter}
+
+    def beschermd(filter_: dict) -> dict:
+        return en_geen_app_rij(filter_, app_kolom) if app_kolom else filter_
+
+    org_adm = {"insert": scope_filter, "update": beschermd(scope_filter), "delete": beschermd(scope_filter)}
     if org_adm_select is not None:
         org_adm["select"] = org_adm_select
     return models.TPerm(
         public=None,
         auth={"select": read_filter if (read_filter is not None and lezen_beperkt()) else {}},
         org_adm=org_adm,
-        sys_adm={"select": {}, "insert": {}, "update": {}, "delete": {}},
+        sys_adm={"select": {}, "insert": {}, "update": beschermd({}), "delete": beschermd({})},
     )
 
 
