@@ -156,7 +156,8 @@ def controleer_voor_opslaan(sender, instance, raw=False, **kwargs):
 
     Een bestaande rij telt als app-rij op basis van de **opgeslagen** staat (zodat
     het weghalen van de markering ook geweigerd wordt), een nieuwe rij op basis
-    van de instantie zelf.
+    van de instantie zelf. ``QuerySet.update()`` en ruwe SQL passeren geen
+    ``pre_save`` en worden dus niet gedekt.
 
     Parameters
     ----------
