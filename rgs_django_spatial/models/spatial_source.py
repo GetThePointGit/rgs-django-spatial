@@ -169,5 +169,8 @@ class SpatialSource(models.Model):
         # org_adm de credentials van alle organisaties. Gewoon lezen loopt via
         # auth en blijft breed (waterworks-ui#219, zie _scope.py).
         return scoped_table_permissions(
-            ORG_SCOPE_FILTER, org_adm_select=ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER
+            ORG_SCOPE_FILTER,
+            org_adm_select=ORG_SCOPE_FILTER,
+            read_filter=LEES_SCOPE_FILTER,
+            app_kolom="source_config",
         )

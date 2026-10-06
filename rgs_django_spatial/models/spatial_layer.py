@@ -205,4 +205,4 @@ class SpatialLayer(models.Model):
     def get_permissions(cls):
         # org_adm muteert alleen lagen van de actieve organisatie, staf alles;
         # lezen blijft breed (waterworks-ui#219, zie _scope.py).
-        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER)
+        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER, app_kolom="params")
