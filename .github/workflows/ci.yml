@@ -41,3 +41,9 @@ jobs:
         run: >-
           PYTHONPATH=tests DJANGO_SETTINGS_MODULE=testapp.settings_test
           pixi run -e prod python -m django makemigrations --check --dry-run --skip-checks rgs_django_spatial
+      # Het pk-type van de migraties mag niet van DEFAULT_AUTO_FIELD van het
+      # project afhangen (#16): ook schoon in een project met AutoField (drainworks).
+      - name: Check for missing migrations (project met AutoField)
+        run: >-
+          PYTHONPATH=tests DJANGO_SETTINGS_MODULE=testapp.settings_autofield
+          pixi run -e prod python -m django makemigrations --check --dry-run --skip-checks rgs_django_spatial

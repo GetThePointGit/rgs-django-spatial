@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 0.9.1 (2026-10-19)
+
+### Gewijzigd
+- `default_auto_field = "django.db.models.BigAutoField"` op de AppConfig (#16). De
+  migraties zijn met `BigAutoField` gegenereerd; tot nu toe hing het pk-type van
+  `SpatialMap` af van `DEFAULT_AUTO_FIELD` in de settings van het project, waardoor
+  een project met `AutoField` (drainworks) een `0010_alter_spatialmap_id` voorgesteld
+  kreeg. Geen nieuwe migratie; voor waterworks en urbanworks (`BigAutoField`) verandert
+  er niets. CI controleert `makemigrations --check` nu ook met `AutoField` als
+  projectstandaard.
+
 ## 0.9.0 (2026-10-06)
 
 ### Toegevoegd

@@ -2,9 +2,8 @@
 
 SECRET_KEY = "test-only"
 USE_TZ = True
-# Gelijk aan de consumers (waterworks, urbanworks); de migraties gaan uit van BigAutoField.
-# Onder Django 6.0 is dit de standaard, onder 5.2 niet.
-DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
+# Bewust géén DEFAULT_AUTO_FIELD: de app legt het pk-type zelf vast via
+# ``default_auto_field`` op de AppConfig (#16). Zie ook settings_autofield.py.
 INSTALLED_APPS = [
     "django.contrib.contenttypes",
     "django.contrib.auth",
