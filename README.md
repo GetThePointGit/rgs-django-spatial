@@ -36,3 +36,11 @@ migratie of permissiewijziging bij gekomen.
 - `GET /mapproxy-config.yaml` filtert bewust niet: de MapProxy-sidecar heeft geen
   gebruiker en heeft de upstream van alle reproject-bronnen nodig. Schermt de consumer
   zelf af (netwerk) en mount hem niet onder een publieke router.
+
+## Codestijl en dev-config
+
+De ruff-kernregels staan in `ruff-gedeeld.toml`, een byte-gelijke kopie van de gedeelde
+config uit `GetThePointGit/rgs-dev-config` (afspraken: `docs/dependencies.md` daar). Niet
+in de kopie bewerken; bijwerken met `rgs-config sync-ruff .`. Repo-eigen uitzonderingen
+horen in `pyproject.toml` (`extend-exclude`, `extend-per-file-ignores`). CI draait
+`rgs-config check --strict` via de herbruikbare workflow `dev-config-check.yml`.

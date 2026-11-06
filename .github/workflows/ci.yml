@@ -47,3 +47,13 @@ jobs:
         run: >-
           PYTHONPATH=tests DJANGO_SETTINGS_MODULE=testapp.settings_autofield
           pixi run -e prod python -m django makemigrations --check --dry-run --skip-checks rgs_django_spatial
+
+  dev-config:
+    # Gedeelde dev-config-afspraken (ruff-kopie, editorconfig, Dependabot) uit
+    # GetThePointGit/rgs-dev-config; zie docs/dependencies.md daar. Vereist dat
+    # rgs-dev-config voor de organisatie toegankelijk is en het secret
+    # GH_PAT_RGS_LIBS (read:packages) beschikbaar is.
+    uses: GetThePointGit/rgs-dev-config/.github/workflows/dev-config-check.yml@main
+    with:
+      strict: true
+    secrets: inherit

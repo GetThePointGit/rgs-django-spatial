@@ -1,5 +1,15 @@
 # Wijzigingen
 
+## 0.9.2 (2026-11-06)
+
+### Gewijzigd
+- Gedeelde dev-config uit `GetThePointGit/rgs-dev-config` (rgs-ui-stack#305, #23). De
+  ruff-kernregels staan in `ruff-gedeeld.toml` (kopie, `pyproject.toml` extendt hem);
+  lokaal blijft alleen `extend-exclude`. Gevolgen: `D401` wordt genegeerd (Nederlandse
+  docstrings) en `F403` erbij voor `__init__.py`. Verder `.editorconfig`, Dependabot
+  voor GitHub Actions en de herbruikbare workflow `dev-config-check.yml` in CI. Geen
+  codewijziging.
+
 ## 0.9.1 (2026-10-19)
 
 ### Gewijzigd
