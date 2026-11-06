@@ -1,5 +1,51 @@
 # Wijzigingen
 
+## 0.10.0 (2026-11-06)
+
+### Gewijzigd
+- **Tiles-opslag via Django `STORAGES`** (#27, epic waterworks#757). `rgs_django_spatial.tiles.storage`
+  gebruikt een gewone Django-storage, standaard `storages["tiles"]` (alias instelbaar met
+  `SPATIAL_TILES_STORAGE_ALIAS`), en kent zelf geen S3 meer: `store_pmtiles` → `storage.save`
+  (de storage moet op overschrijven staan, anders `ImproperlyConfigured`), `delete_pmtiles` →
+  `storage.delete`, `read_object` → `storage.open`, `pmtiles_url` → `storage.url_signed(key,
+  expires=TILES_URL_TTL)` als de storage dat biedt (`FsspecStorage` op S3), anders `storage.url`.
+  Consumers zetten in `settings.py`:
+
+  ```python
+  # lokaal (dev): bestanden onder VAR_DIR/tiles, geserveerd op /tiles/
+  STORAGES["tiles"] = {
+      "BACKEND": "django.core.files.storage.FileSystemStorage",
+      "OPTIONS": {"location": VAR_DIR / "tiles", "base_url": "/tiles/", "allow_overwrite": True},
+  }
+  # S3 (gehost): private bucket, presigned GET-URL's
+  STORAGES["tiles"] = {
+      "BACKEND": "django_fsspec.FsspecStorage",
+      "OPTIONS": {
+          "on_collision": "overwrite",
+          "storage_config": {
+              "protocol": "s3", "key": S3_ACCESS_KEY, "secret": S3_SECRET_KEY,
+              "endpoint_url": "https://s3.nl-ams.scw.cloud",
+              "client_kwargs": {"region_name": "nl-ams"},
+              "relative_to_path": f"{S3_BUCKET_TILES}/{S3_TILES_PREFIX}",
+          },
+      },
+  }
+  ```
+
+  Daarmee kunnen media en tiles dezelfde credentials en dezelfde `django_fsspec`-configuratie
+  delen, en wordt de s3fs-afhankelijkheid nog maar op één plek (django-fsspec) bewaakt.
+- **Overgangsregeling, één release:** ontbreekt de alias maar staan `TILES_STORAGE`/`TILES_S3`
+  (en `VAR_DIR`) er nog, dan bouwt de module daar intern een gelijkwaardige `FsspecStorage`
+  van en geeft een `DeprecationWarning`. Daarvoor moet django-fsspec geïnstalleerd zijn (bij
+  waterworks en urbanworks al zo voor media). `TILES_URL_TTL` blijft.
+- `pixi.toml` (alleen dev/CI): django-fsspec erbij, ondergrens `s3fs >= 2026.6.0`
+  (presign-geheugenlek s3fs#1019, zie django-fsspec#14 en urbanworks#408).
+
+### Verwijderd
+- `tiles_backend()`, `local_pmtiles_path()`, `_tiles_key()`, `_s3fs()` en `_s3_object_path()`
+  uit `tiles.storage`; de consumers (waterworks, urbanworks) gebruikten alleen de vier
+  publieke functies, die ongewijzigd van signatuur zijn.
+
 ## 0.9.2 (2026-11-06)
 
 ### Gewijzigd

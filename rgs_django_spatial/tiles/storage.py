@@ -1,116 +1,215 @@
-"""Where a laag's ``.pmtiles`` lives and how the browser addresses it.
+"""Opslag van de PMTiles (en geserveerde GeoJSON) van een bron via een Django-storage.
 
-Gated on ``settings.TILES_STORAGE``:
+De tiles staan in een gewone Django-storage uit ``settings.STORAGES``, standaard
+onder de alias ``"tiles"`` (instelbaar met ``SPATIAL_TILES_STORAGE_ALIAS``).
+Deze module kent geen S3-details: lokaal of object storage is een kwestie van
+één ``STORAGES``-regel in het project, net als voor media.
 
-* ``"local"`` (default) — the file lives under ``VAR_DIR/tiles/`` and is served
-  by the in-cluster ``tiles-nginx`` sidecar at ``/tiles/{id}.pmtiles``.
-* ``"s3"`` — the file is uploaded to a **private** Scaleway Object Storage
-  bucket; the browser gets a short-lived **presigned GET URL** so the bucket
-  never needs to be public. PMTiles' HTTP range requests hit S3 directly.
+Eisen aan de storage
+--------------------
+* ``save(key, content)`` moet ``key`` ongewijzigd teruggeven: zet de storage
+  op overschrijven (``FileSystemStorage``: ``allow_overwrite=True``;
+  ``django_fsspec.FsspecStorage``: ``on_collision="overwrite"``). Een storage die
+  hernoemt geeft een ``ImproperlyConfigured``.
+* ``url(key)`` geeft het pad waar de browser de tiles laadt; voor een lokale
+  storage is dat ``base_url="/tiles/"`` (bediend door bv. een nginx-sidecar).
+* Optioneel ``url_signed(key, expires=...)`` (``FsspecStorage`` op S3): dan krijgt
+  de browser een kortlevende presigned GET-URL en hoeft de bucket niet publiek.
+  Gooit de storage daarbij ``NotImplementedError`` (geen S3-backend), dan valt
+  :func:`pmtiles_url` terug op ``url()``.
 
-S3 connection settings are read from ``settings.TILES_S3`` (a dict assembled in
-settings.py, only when TILES_STORAGE == "s3").
+Voorbeeld (lokaal)::
 
-Vereiste consumer-settings
---------------------------
-TILES_STORAGE ("local"|"s3", default "local"), VAR_DIR (default "var"),
-TILES_URL_TTL (default 86400) en — alleen bij "s3" — TILES_S3
-(dict: key, secret, endpoint_url, bucket, optioneel prefix/region).
+    STORAGES["tiles"] = {
+        "BACKEND": "django.core.files.storage.FileSystemStorage",
+        "OPTIONS": {"location": VAR_DIR / "tiles", "base_url": "/tiles/", "allow_overwrite": True},
+    }
+
+Voorbeeld (S3, private bucket, presigned URL's)::
+
+    STORAGES["tiles"] = {
+        "BACKEND": "django_fsspec.FsspecStorage",
+        "OPTIONS": {
+            "on_collision": "overwrite",
+            "storage_config": {
+                "protocol": "s3",
+                "key": S3_ACCESS_KEY, "secret": S3_SECRET_KEY,
+                "endpoint_url": "https://s3.nl-ams.scw.cloud",
+                "client_kwargs": {"region_name": "nl-ams"},
+                "relative_to_path": "mijn-bucket/prefix",
+            },
+        },
+    }
+
+Overgangsregeling (één release): ontbreekt de alias maar staan de oude settings
+``TILES_STORAGE``/``TILES_S3``/``VAR_DIR`` er nog, dan bouwt deze module daar
+intern een gelijkwaardige ``FsspecStorage`` van (django-fsspec vereist) en
+geeft een ``DeprecationWarning``. ``TILES_URL_TTL`` (seconden, default 86400)
+blijft de geldigheid van presigned URL's bepalen.
 """
 
 import os
-import shutil
+import warnings
 
 from django.conf import settings
+from django.core.exceptions import ImproperlyConfigured
+from django.core.files import File
+from django.core.files.storage import InvalidStorageError, storages
 
-LOCAL_BACKEND = "local"
-S3_BACKEND = "s3"
+DEFAULT_STORAGE_ALIAS = "tiles"
+DEFAULT_URL_TTL = 86400
 
-
-def tiles_backend() -> str:
-    return getattr(settings, "TILES_STORAGE", LOCAL_BACKEND) or LOCAL_BACKEND
-
-
-def _tiles_key(key: str, prefix: str = "") -> str:
-    """Volledige object-key incl. optionele bucket-prefix."""
-    prefix = (prefix or "").strip("/")
-    key = key.lstrip("/")
-    return f"{prefix}/{key}" if prefix else key
+_LEGACY_SETTINGS = ("TILES_STORAGE", "TILES_S3")
 
 
-def local_pmtiles_path(key: str) -> str:
-    return os.path.join(getattr(settings, "VAR_DIR", "var"), "tiles", *key.split("/"))
+def tiles_storage():
+    """Geef de Django-storage waarin de tiles staan.
+
+    Returns
+    -------
+    django.core.files.storage.Storage
+        ``storages[alias]`` met ``alias`` uit ``SPATIAL_TILES_STORAGE_ALIAS``
+        (default ``"tiles"``), of de overgangs-storage uit de oude settings.
+
+    Raises
+    ------
+    ImproperlyConfigured
+        Als de alias ontbreekt en er ook geen oude ``TILES_*``-settings zijn.
+    """
+    alias = getattr(settings, "SPATIAL_TILES_STORAGE_ALIAS", DEFAULT_STORAGE_ALIAS)
+    try:
+        return storages[alias]
+    except InvalidStorageError:
+        legacy = _legacy_storage()
+        if legacy is not None:
+            return legacy
+        raise ImproperlyConfigured(
+            f"rgs_django_spatial: geen storage met alias {alias!r} in settings.STORAGES. "
+            "Voeg een 'tiles'-storage toe (zie rgs_django_spatial.tiles.storage) of zet "
+            "SPATIAL_TILES_STORAGE_ALIAS op een bestaande alias."
+        ) from None
 
 
-def _s3fs():
-    """Build an s3fs filesystem from settings.TILES_S3."""
-    import s3fs
+def _legacy_storage():
+    """Bouw een storage uit de oude ``TILES_STORAGE``/``TILES_S3``-settings, of ``None``.
 
-    cfg = getattr(settings, "TILES_S3", {})
-    return s3fs.S3FileSystem(
-        key=cfg["key"],
-        secret=cfg["secret"],
-        endpoint_url=cfg["endpoint_url"],
-        client_kwargs={"region_name": cfg.get("region", "nl-ams")},
+    Verdwijnt na deze overgangsrelease; zie de module-docstring.
+    """
+    if not any(hasattr(settings, naam) for naam in _LEGACY_SETTINGS):
+        return None
+    try:
+        from django_fsspec import FsspecStorage
+    except ImportError as exc:  # pragma: no cover - afhankelijk van de omgeving
+        raise ImproperlyConfigured(
+            "rgs_django_spatial: de oude TILES_STORAGE/TILES_S3-settings vereisen django-fsspec. "
+            "Installeer django-fsspec of configureer STORAGES['tiles']."
+        ) from exc
+
+    warnings.warn(
+        "rgs_django_spatial: TILES_STORAGE/TILES_S3/VAR_DIR zijn vervangen door "
+        "settings.STORAGES['tiles'] en verdwijnen in de volgende release.",
+        DeprecationWarning,
+        stacklevel=3,
+    )
+    backend = getattr(settings, "TILES_STORAGE", None) or "local"
+    if backend == "s3":
+        cfg = dict(getattr(settings, "TILES_S3", None) or {})
+        root = cfg["bucket"]
+        prefix = (cfg.get("prefix") or "").strip("/")
+        if prefix:
+            root = f"{root}/{prefix}"
+        return FsspecStorage(
+            on_collision="overwrite",
+            storage_config={
+                "protocol": "s3",
+                "key": cfg.get("key"),
+                "secret": cfg.get("secret"),
+                "endpoint_url": cfg.get("endpoint_url"),
+                "client_kwargs": {"region_name": cfg.get("region", "nl-ams")},
+                "relative_to_path": root,
+            },
+        )
+    root = os.path.abspath(os.path.join(getattr(settings, "VAR_DIR", None) or "var", "tiles"))
+    return FsspecStorage(
+        base_url="/tiles/",
+        on_collision="overwrite",
+        storage_config={"protocol": "file", "auto_mkdir": True, "relative_to_path": root},
     )
 
 
-def _s3_object_path(key: str) -> str:
-    cfg = getattr(settings, "TILES_S3", {})
-    return f"{cfg['bucket']}/{_tiles_key(key, cfg.get('prefix', ''))}"
-
-
 def store_pmtiles(key: str, local_path: str) -> None:
-    """Persist a freshly generated ``.pmtiles`` (from ``local_path``) to the backend."""
-    if tiles_backend() == S3_BACKEND:
-        fs = _s3fs()
-        fs.put_file(local_path, _s3_object_path(key))
-        os.remove(local_path)
-        return
-    dst = local_pmtiles_path(key)
-    os.makedirs(os.path.dirname(dst), exist_ok=True)
-    shutil.move(local_path, dst)
+    """Sla een vers gegenereerd bestand (``local_path``) op onder ``key`` en ruim het lokale op.
+
+    Parameters
+    ----------
+    key : str
+        Objectnaam binnen de tiles-storage, bv. ``"spatial/7.pmtiles"``.
+    local_path : str
+        Pad van het zojuist gebouwde bestand; wordt na opslaan verwijderd.
+
+    Raises
+    ------
+    ImproperlyConfigured
+        Als de storage het bestand onder een andere naam opslaat (niet op
+        overschrijven ingesteld); het verkeerd opgeslagen object wordt dan
+        weer verwijderd.
+    """
+    storage = tiles_storage()
+    with open(local_path, "rb") as fh:
+        saved = storage.save(key, File(fh, name=key))
+    if saved != key:
+        storage.delete(saved)
+        raise ImproperlyConfigured(
+            f"rgs_django_spatial: de tiles-storage sloeg {key!r} op als {saved!r}. Zet de storage op "
+            "overschrijven (FileSystemStorage: allow_overwrite=True; FsspecStorage: on_collision='overwrite')."
+        )
+    os.remove(local_path)
 
 
 def delete_pmtiles(key: str) -> None:
-    """Remove a dataset's PMTiles from the active backend (idempotent)."""
-    if tiles_backend() == S3_BACKEND:
-        fs = _s3fs()
-        path = _s3_object_path(key)
-        if fs.exists(path):
-            fs.rm(path)
-        return
-    local = local_pmtiles_path(key)
-    if os.path.exists(local):
-        os.remove(local)
+    """Verwijder het object ``key`` uit de tiles-storage (idempotent)."""
+    tiles_storage().delete(key)
 
 
 def pmtiles_url(key: str) -> str:
-    """URL the frontend loads the PMTiles from (stable path, or presigned S3 URL)."""
-    if tiles_backend() == S3_BACKEND:
-        ttl = int(getattr(settings, "TILES_URL_TTL", 86400))
-        return _s3fs().sign(_s3_object_path(key), expiration=ttl)
-    return f"/tiles/{key}"
+    """URL waarop de browser ``key`` laadt: presigned als de storage dat kan, anders ``url()``.
+
+    Parameters
+    ----------
+    key : str
+        Objectnaam binnen de tiles-storage.
+
+    Returns
+    -------
+    str
+        ``storage.url_signed(key, expires=TILES_URL_TTL)`` als de storage die
+        methode heeft en geen ``NotImplementedError`` gooit; anders
+        ``storage.url(key)``.
+    """
+    storage = tiles_storage()
+    url_signed = getattr(storage, "url_signed", None)
+    if url_signed is not None:
+        ttl = int(getattr(settings, "TILES_URL_TTL", DEFAULT_URL_TTL))
+        try:
+            return url_signed(key, expires=ttl)
+        except NotImplementedError:
+            pass
+    return storage.url(key)
 
 
 def read_object(key: str) -> bytes:
-    """Lees een opgeslagen object (bv. een geserveerd ``.geojson``) uit de backend.
+    """Lees een opgeslagen object (bv. een geserveerd ``.geojson``) uit de tiles-storage.
 
-    Storage-agnostisch: leest uit S3 (via s3fs) of van het lokale pad. Bedoeld voor
-    kleine bestanden die door Django worden gestreamd (i.t.t. PMTiles, die de
-    browser via een presigned URL rechtstreeks bij S3 ophaalt).
+    Bedoeld voor kleine bestanden die Django zelf streamt (i.t.t. PMTiles, die de
+    browser via :func:`pmtiles_url` rechtstreeks ophaalt).
 
     Raises
     ------
     FileNotFoundError
         Als het object niet bestaat.
     """
-    if tiles_backend() == S3_BACKEND:
-        fs = _s3fs()
-        path = _s3_object_path(key)
-        if not fs.exists(path):
-            raise FileNotFoundError(key)
-        with fs.open(path, "rb") as f:
-            return f.read()
-    with open(local_pmtiles_path(key), "rb") as f:
+    storage = tiles_storage()
+    if not storage.exists(key):
+        raise FileNotFoundError(key)
+    with storage.open(key, "rb") as f:
         return f.read()

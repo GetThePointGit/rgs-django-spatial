@@ -66,8 +66,13 @@ GeoAlchemy2 = "==0.20.*"
 # xlsxwriter (over openpyxl) because it is faster and has better support for styling
 xlsxwriter = "==3.*"  # used for exporting excel files
 
-# S3-opslag voor tiles (tiles.storage)
-s3fs = ">=2024.2.0"
+# Tiles-opslag (tiles.storage) loopt via een Django-storage; de overgangsroute
+# vanuit de oude TILES_*-settings en de presign-tests gebruiken django-fsspec
+# (niet op PyPI, daarom hier en niet in pyproject.toml). Ondergrens s3fs: vanaf
+# 2026.6.0 lekt sign()/url() geen aiobotocore-client meer (s3fs#1019,
+# django-fsspec#14, urbanworks#408).
+django-fsspec = { git = "https://github.com/GetThePointGit/django-fsspec.git", branch = "main", extras = ["s3"] }
+s3fs = ">=2026.6.0"
 
 # pytest hier (gedeeld) zodat de prod-env in CI de tests kan draaien zonder de
 # sibling-checkout (die alleen de dev-env nodig heeft).

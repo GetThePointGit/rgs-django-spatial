@@ -1,108 +1,170 @@
-"""Tiles storage backend selection + key building are pure/local-testable.
+"""``rgs_django_spatial.tiles.storage`` praat alleen via de Django-storage-API.
 
-S3 upload + presign are covered by an integration test gated on real creds;
-here we only assert the pure key/path-building helpers, using monkeypatch
-against ``django.conf.settings`` (this project does not use pytest-django).
+Lokaal met ``FileSystemStorage`` (uit ``settings_test``), presign met stub-storages
+die ``url_signed`` wel of niet kunnen, en de overgangsroute met de oude
+``TILES_*``-settings via ``django_fsspec.FsspecStorage``.
 """
 
-import os
+import warnings
 
-from django.conf import settings as dj_settings
+import pytest
+from django.core.exceptions import ImproperlyConfigured
+from testapp import tiles_stubs
 
 from rgs_django_spatial.tiles import storage
 
-
-def test_tiles_key_without_prefix():
-    assert storage._tiles_key("42.pmtiles") == "42.pmtiles"
+FS = "django.core.files.storage.FileSystemStorage"
 
 
-def test_tiles_key_with_prefix_is_normalised():
-    assert storage._tiles_key("42.pmtiles", "/tiles/") == "tiles/42.pmtiles"
+def _storages_met_tiles(tmp_path, **opties):
+    return {
+        "default": {"BACKEND": FS},
+        "tiles": {
+            "BACKEND": FS,
+            "OPTIONS": {"location": str(tmp_path / "tiles"), "base_url": "/tiles/", "allow_overwrite": True, **opties},
+        },
+    }
 
 
-def test_local_pmtiles_url_is_stable_path(monkeypatch):
-    # TILES_STORAGE is not defined on settings yet (Task 7 adds it), so this
-    # attribute may not exist -- allow setattr to create it.
-    monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
+@pytest.fixture
+def tiles_dir(settings, tmp_path):
+    settings.STORAGES = _storages_met_tiles(tmp_path)
+    return tmp_path / "tiles"
+
+
+def _bron(tmp_path, inhoud=b"PMTILESDATA"):
+    src = tmp_path / "bron.pmtiles"
+    src.write_bytes(inhoud)
+    return src
+
+
+# ---------- lokaal (FileSystemStorage) ----------
+
+
+def test_store_pmtiles_saves_under_key_and_removes_source(tiles_dir, tmp_path):
+    src = _bron(tmp_path)
+    storage.store_pmtiles("99.pmtiles", str(src))
+    assert (tiles_dir / "99.pmtiles").read_bytes() == b"PMTILESDATA"
+    assert not src.exists()
+
+
+def test_store_pmtiles_creates_subdirs(tiles_dir, tmp_path):
+    storage.store_pmtiles("spatial/7.pmtiles", str(_bron(tmp_path, b"x")))
+    assert (tiles_dir / "spatial" / "7.pmtiles").read_bytes() == b"x"
+
+
+def test_store_pmtiles_overwrites_existing(tiles_dir, tmp_path):
+    storage.store_pmtiles("7.pmtiles", str(_bron(tmp_path, b"oud")))
+    storage.store_pmtiles("7.pmtiles", str(_bron(tmp_path, b"nieuw")))
+    assert (tiles_dir / "7.pmtiles").read_bytes() == b"nieuw"
+    assert sorted(p.name for p in tiles_dir.iterdir()) == ["7.pmtiles"]
+
+
+def test_store_pmtiles_rejects_storage_that_renames(settings, tmp_path):
+    settings.STORAGES = _storages_met_tiles(tmp_path, allow_overwrite=False)
+    storage.store_pmtiles("7.pmtiles", str(_bron(tmp_path, b"oud")))
+    with pytest.raises(ImproperlyConfigured, match="overschrijven"):
+        storage.store_pmtiles("7.pmtiles", str(_bron(tmp_path, b"nieuw")))
+    # Het hernoemde object is weer opgeruimd; het origineel staat er nog.
+    assert sorted(p.name for p in (tmp_path / "tiles").iterdir()) == ["7.pmtiles"]
+    assert (tmp_path / "tiles" / "7.pmtiles").read_bytes() == b"oud"
+
+
+def test_delete_pmtiles_removes_file_and_is_idempotent(tiles_dir, tmp_path):
+    storage.store_pmtiles("5.pmtiles", str(_bron(tmp_path)))
+    storage.delete_pmtiles("5.pmtiles")
+    assert not (tiles_dir / "5.pmtiles").exists()
+    storage.delete_pmtiles("5.pmtiles")  # mag niet gooien
+
+
+def test_read_object_returns_bytes(tiles_dir, tmp_path):
+    storage.store_pmtiles("spatial/3.geojson", str(_bron(tmp_path, b"{}")))
+    assert storage.read_object("spatial/3.geojson") == b"{}"
+
+
+def test_read_object_missing_raises_file_not_found(tiles_dir):
+    with pytest.raises(FileNotFoundError):
+        storage.read_object("bestaat-niet.geojson")
+
+
+def test_pmtiles_url_local_uses_storage_url(tiles_dir):
     assert storage.pmtiles_url("7.pmtiles") == "/tiles/7.pmtiles"
 
 
-def test_local_pmtiles_path_supports_subdir(monkeypatch, tmp_path):
-    from django.conf import settings
-
-    from rgs_django_spatial.tiles.storage import local_pmtiles_path
-
-    monkeypatch.setattr(settings, "VAR_DIR", str(tmp_path), raising=False)
-    assert local_pmtiles_path("spatial/7.pmtiles") == str(tmp_path / "tiles" / "spatial" / "7.pmtiles")
+# ---------- presign (duck-typed url_signed) ----------
 
 
-def test_store_pmtiles_local_moves_file(monkeypatch, tmp_path):
-    monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
-    monkeypatch.setattr(dj_settings, "VAR_DIR", str(tmp_path))
-    src = tmp_path / "src.pmtiles"
-    src.write_bytes(b"PMTILESDATA")
-    storage.store_pmtiles("99.pmtiles", str(src))
-    dst = tmp_path / "tiles" / "99.pmtiles"
-    assert dst.read_bytes() == b"PMTILESDATA"
-    assert not src.exists()  # moved, not copied
+def test_pmtiles_url_prefers_url_signed_with_ttl(settings):
+    settings.STORAGES = {"default": {"BACKEND": FS}, "tiles": {"BACKEND": "testapp.tiles_stubs.SignedStubStorage"}}
+    settings.TILES_URL_TTL = 1234
+    tiles_stubs.SIGNED_CALLS.clear()
+    assert storage.pmtiles_url("7.pmtiles") == "https://signed.example/7.pmtiles?ttl=1234"
+    assert tiles_stubs.SIGNED_CALLS == [("7.pmtiles", 1234)]
 
 
-def test_store_pmtiles_local_creates_subdirs(monkeypatch, tmp_path):
-    from django.conf import settings
-
-    from rgs_django_spatial.tiles.storage import local_pmtiles_path, store_pmtiles
-
-    monkeypatch.setattr(settings, "VAR_DIR", str(tmp_path), raising=False)
-    monkeypatch.setattr(settings, "TILES_STORAGE", "local", raising=False)
-    src = tmp_path / "in.pmtiles"
-    src.write_bytes(b"x")
-    store_pmtiles("spatial/7.pmtiles", str(src))
-    assert os.path.exists(local_pmtiles_path("spatial/7.pmtiles"))
+def test_pmtiles_url_default_ttl_is_24h(settings):
+    settings.STORAGES = {"default": {"BACKEND": FS}, "tiles": {"BACKEND": "testapp.tiles_stubs.SignedStubStorage"}}
+    tiles_stubs.SIGNED_CALLS.clear()
+    storage.pmtiles_url("7.pmtiles")
+    assert tiles_stubs.SIGNED_CALLS == [("7.pmtiles", 86400)]
 
 
-def test_s3_object_path_builds_bucket_and_key(monkeypatch):
-    # TILES_S3 is not defined on settings yet (Task 7 adds it), so allow
-    # setattr to create it rather than requiring it to pre-exist.
-    monkeypatch.setattr(
-        dj_settings,
-        "TILES_S3",
-        {
-            "bucket": "urbanworks-tiles",
-            "prefix": "pmtiles",
-            "key": "AKIA...",
-            "secret": "...",
-            "endpoint_url": "https://s3.nl-ams.scw.cloud",
-        },
-        raising=False,
-    )
-    assert storage._s3_object_path("123.pmtiles") == "urbanworks-tiles/pmtiles/123.pmtiles"
+def test_pmtiles_url_falls_back_when_url_signed_not_implemented(settings):
+    settings.STORAGES = {"default": {"BACKEND": FS}, "tiles": {"BACKEND": "testapp.tiles_stubs.UnsignedStubStorage"}}
+    assert storage.pmtiles_url("7.pmtiles") == "/plain/7.pmtiles"
 
 
-def test_delete_pmtiles_local_removes_file(monkeypatch, tmp_path):
-    from django.conf import settings as dj_settings
-
-    from rgs_django_spatial.tiles import storage
-
-    monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
-    monkeypatch.setattr(dj_settings, "VAR_DIR", str(tmp_path), raising=False)
-    dst = tmp_path / "tiles" / "5.pmtiles"
-    dst.parent.mkdir(parents=True)
-    dst.write_bytes(b"X")
-    storage.delete_pmtiles("5.pmtiles")
-    assert not dst.exists()
+def test_custom_alias(settings):
+    settings.STORAGES = {"default": {"BACKEND": FS}, "kaart": {"BACKEND": "testapp.tiles_stubs.SignedStubStorage"}}
+    settings.SPATIAL_TILES_STORAGE_ALIAS = "kaart"
+    assert storage.pmtiles_url("1.pmtiles").startswith("https://signed.example/1.pmtiles")
 
 
-def test_delete_pmtiles_local_missing_is_noop(monkeypatch, tmp_path):
-    from django.conf import settings as dj_settings
+def test_missing_alias_without_legacy_settings_is_improperly_configured(settings):
+    settings.STORAGES = {"default": {"BACKEND": FS}}
+    for naam in ("TILES_STORAGE", "TILES_S3"):
+        if hasattr(settings, naam):
+            delattr(settings, naam)
+    with pytest.raises(ImproperlyConfigured, match="'tiles'"):
+        storage.tiles_storage()
 
-    from rgs_django_spatial.tiles import storage
 
-    monkeypatch.setattr(dj_settings, "TILES_STORAGE", "local", raising=False)
-    monkeypatch.setattr(dj_settings, "VAR_DIR", str(tmp_path), raising=False)
-    storage.delete_pmtiles("999.pmtiles")  # must not raise
+# ---------- overgangsroute: oude TILES_*-settings ----------
 
 
-def test_settings_expose_tiles_storage_default_local():
-    from django.conf import settings
+def test_legacy_local_settings_build_fsspec_storage_with_warning(settings, tmp_path):
+    settings.STORAGES = {"default": {"BACKEND": FS}}
+    settings.TILES_STORAGE = "local"
+    settings.VAR_DIR = str(tmp_path)
+    with pytest.warns(DeprecationWarning, match="STORAGES"):
+        storage.store_pmtiles("spatial/7.pmtiles", str(_bron(tmp_path, b"legacy")))
+    assert (tmp_path / "tiles" / "spatial" / "7.pmtiles").read_bytes() == b"legacy"
+    with warnings.catch_warnings():
+        warnings.simplefilter("ignore", DeprecationWarning)
+        assert storage.pmtiles_url("spatial/7.pmtiles") == "/tiles/spatial/7.pmtiles"
+        assert storage.read_object("spatial/7.pmtiles") == b"legacy"
+        storage.delete_pmtiles("spatial/7.pmtiles")
+    assert not (tmp_path / "tiles" / "spatial" / "7.pmtiles").exists()
 
-    assert getattr(settings, "TILES_STORAGE", "local") == "local"
+
+def test_legacy_s3_settings_map_bucket_and_prefix(settings):
+    from django_fsspec import FsspecStorage
+
+    settings.STORAGES = {"default": {"BACKEND": FS}}
+    settings.TILES_STORAGE = "s3"
+    settings.TILES_S3 = {
+        "key": "AKIA...",
+        "secret": "...",
+        "endpoint_url": "https://s3.nl-ams.scw.cloud",
+        "bucket": "urbanworks-tiles",
+        "prefix": "/pmtiles/",
+        "region": "nl-ams",
+    }
+    with pytest.warns(DeprecationWarning):
+        st = storage.tiles_storage()
+    assert isinstance(st, FsspecStorage)
+    assert st.on_collision == "overwrite"
+    s3_fs, bucket, key = st._resolve_s3_target("123.pmtiles")
+    assert (bucket, key) == ("urbanworks-tiles", "pmtiles/123.pmtiles")
+    assert s3_fs.client_kwargs == {"region_name": "nl-ams"}
+    assert hasattr(st, "url_signed")
