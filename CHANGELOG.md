@@ -1,5 +1,20 @@
 # Wijzigingen
 
+## 0.9.2 (2026-11-06)
+
+### Gewijzigd
+- Gedeelde dev-config uit `GetThePointGit/rgs-dev-config` (rgs-ui-stack#305, #23). De
+  ruff-kernregels staan in `ruff-gedeeld.toml` (kopie, `pyproject.toml` extendt hem);
+  lokaal blijft alleen `extend-exclude`. Gevolgen: `D401` wordt genegeerd (Nederlandse
+  docstrings) en `F403` erbij voor `__init__.py`. Verder `.editorconfig`, Dependabot
+  voor GitHub Actions en de herbruikbare workflow `dev-config-check.yml` in CI. Geen
+  codewijziging.
+- `pixi.toml`: `python-dateutil = "<3"` in de conda-dependencies en `s3fs = ">=2024.2.0"`.
+  Een verse solve koos sinds kort python-dateutil 4.x, waardoor botocore (via s3fs →
+  aiobotocore) niet paste en de pypi-solve terugviel op `s3fs==0.3.5` (sdist die niet
+  bouwt op Python 3.12). Alleen de ontwikkel-/CI-omgeving; de library-eisen in
+  `pyproject.toml` veranderen niet.
+
 ## 0.9.1 (2026-10-19)
 
 ### Gewijzigd

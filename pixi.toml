@@ -38,6 +38,10 @@ shapely = "2.0.*"
 
 python-dotenv = ">=1.1.0,<2"
 psycopg = "3.2.*"
+# botocore (via s3fs → aiobotocore) eist python-dateutil <3; zonder deze pin kiest de
+# conda-solve dateutil 4.x en valt de pypi-solve terug op een stokoude s3fs (0.3.5, sdist
+# die niet bouwt op Python 3.12).
+python-dateutil = "<3"
 
 # WMS/WFS-capabilities parsing (tiles.ogc_capabilities)
 owslib = "*"
@@ -63,7 +67,7 @@ GeoAlchemy2 = "==0.20.*"
 xlsxwriter = "==3.*"  # used for exporting excel files
 
 # S3-opslag voor tiles (tiles.storage)
-s3fs = "*"
+s3fs = ">=2024.2.0"
 
 # pytest hier (gedeeld) zodat de prod-env in CI de tests kan draaien zonder de
 # sibling-checkout (die alleen de dev-env nodig heeft).

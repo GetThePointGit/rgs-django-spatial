@@ -1,6 +1,6 @@
 [project]
 name = "rgs-django-spatial"
-version = "0.9.1"
+version = "0.9.2"
 description = "Data model and functions for configuring maps sources"
 readme = "README.md"
 requires-python = "~=3.12"
@@ -37,27 +37,14 @@ pythonpath = ["tests"]
 
 # FORMATTING
 [tool.ruff]
-# see https://docs.astral.sh/ruff/rules/ for meaning of rules
-line-length = 119
+# De kernregels (line-length, select, ignore, format, numpy-docstrings,
+# __init__-ignores) staan in ruff-gedeeld.toml: een byte-gelijke kopie van de
+# gedeelde config uit GetThePointGit/rgs-dev-config. Niet hier overschrijven;
+# bijwerken met `rgs-config sync-ruff .`, `rgs-config check` meldt drift.
+extend = "ruff-gedeeld.toml"
 
-#Exclude external packages in formatter
+# Repo-eigen uitsluitingen.
 extend-exclude = [".pixi/*", "var/*", "migrations/*",]
-include = ["*.py"]
-
-[tool.ruff.format]
-quote-style = "double"
-
-[tool.ruff.lint]
-select = ["D", "E", "F", "NPY", "PD", "C4", "I"]
-ignore = ["D1", "D202", "D205", "D400", "D404", "E501", "PD002"]
-fixable = ["I"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "numpy"
-
-[tool.ruff.lint.per-file-ignores]
-# Ignore unused imports in init
-"__init__.py" = ["F401",  "I001"]
 
 [tool.pylint]
 disable = ["W1203"]
