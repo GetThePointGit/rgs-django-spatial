@@ -31,7 +31,7 @@ from ._sections import section_maps
 
 # layer:
 #  - (source + style)[]
-#  - legend?
+#  - legend (vaste afbeelding: legend_url)
 #  - link (public/ organisation / project)
 
 
@@ -92,6 +92,19 @@ class SpatialLayer(models.Model):
         blank=True,
         config=models.Config(
             doc_short="Icoon van de kaartlaag (bijv. URL naar afbeelding)",
+            permissions=models.FPerm("---", auth="isu"),
+        ),
+    )
+
+    legend_url = models.TextStringField(
+        verbose_name="legenda-afbeelding",
+        null=True,
+        blank=True,
+        config=models.Config(
+            doc_short=(
+                "URL van een vaste legenda-afbeelding voor bronnen die zelf geen legenda leveren "
+                "(bijv. een ArcGIS ImageServer); de kaartlegenda toont die onder de laag"
+            ),
             permissions=models.FPerm("---", auth="isu"),
         ),
     )

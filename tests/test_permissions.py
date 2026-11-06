@@ -202,6 +202,28 @@ class TestSpatialSourceAuthenticationConfigIsSecret(SimpleTestCase):
 
 
 @override_settings(PERMISSION_TREE=TEST_TREE)
+class TestLegendUrl(SimpleTestCase):
+    """``legend_url`` (urbanworks#168): de kaartlegenda leest het, org_adm en staf schrijven het."""
+
+    def setUp(self):
+        self.helper = PermissionHelper()
+
+    def test_optioneel_veld_zonder_default(self):
+        veld = SpatialLayer._meta.get_field("legend_url")
+        self.assertTrue(veld.null)
+        self.assertTrue(veld.blank)
+
+    def test_effectieve_rechten_als_bij_icon(self):
+        """Veldmasker identiek aan een vergelijkbaar leesveld; wie mag muteren regelt de tabelregel."""
+        field_perms = self.helper.get_rol_field_permissions(SpatialLayer)
+        for role in ("auth", "org_mem", "org_uman", "org_adm", "sys_adm", "dev", "dev_man"):
+            with self.subTest(role=role):
+                self.assertEqual(field_perms["legend_url"][role], field_perms["icon"][role])
+        self.assertTrue(field_perms["legend_url"]["auth"]["select"], "elke ingelogde gebruiker leest legend_url")
+        self.assertFalse(field_perms["legend_url"]["public"]["select"])
+
+
+@override_settings(PERMISSION_TREE=TEST_TREE)
 class TestScopeKolommen(SimpleTestCase):
     """access_through/access_id: org_adm zet ze bij aanmaken, alleen staf wijzigt ze."""
 

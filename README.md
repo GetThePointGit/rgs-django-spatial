@@ -71,7 +71,7 @@ STORAGES["tiles"] = {
 ```
 
 De oude settings `TILES_STORAGE`/`TILES_S3`/`VAR_DIR` werken nog één release (met
-`DeprecationWarning`, django-fsspec vereist); zie `CHANGELOG.md` 0.10.0.
+`DeprecationWarning`, django-fsspec vereist); zie `CHANGELOG.md` 0.11.0.
 
 ## Codestijl en dev-config
 

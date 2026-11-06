@@ -1,6 +1,6 @@
 # Wijzigingen
 
-## 0.10.0 (2026-11-06)
+## 0.11.0 (2026-11-06)
 
 ### Gewijzigd
 - **Tiles-opslag via Django `STORAGES`** (#27, epic waterworks#757). `rgs_django_spatial.tiles.storage`
@@ -45,6 +45,15 @@
 - `tiles_backend()`, `local_pmtiles_path()`, `_tiles_key()`, `_s3fs()` en `_s3_object_path()`
   uit `tiles.storage`; de consumers (waterworks, urbanworks) gebruikten alleen de vier
   publieke functies, die ongewijzigd van signatuur zijn.
+## 0.10.0 (2026-11-06)
+
+### Toegevoegd
+- `SpatialLayer.legend_url` (optioneel, migratie `0010_spatiallayer_legend_url`): URL van een
+  vaste legenda-afbeelding voor bronnen die zelf geen legenda leveren (bijv. een ArcGIS
+  ImageServer); de kaartlegenda in `@getthepointgit/map` toont die onder de laag
+  (urbanworks#168). Rechten als de andere laagvelden: lezen voor elke ingelogde gebruiker,
+  schrijven volgens de bestaande tabelregel (`org_adm` eigen organisatie, staf alles). Na
+  het bijwerken: migreren en de Hasura-metadata opnieuw genereren/toepassen.
 
 ## 0.9.2 (2026-11-06)
 
