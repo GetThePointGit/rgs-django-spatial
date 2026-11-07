@@ -37,6 +37,42 @@ migratie of permissiewijziging bij gekomen.
   gebruiker en heeft de upstream van alle reproject-bronnen nodig. Schermt de consumer
   zelf af (netwerk) en mount hem niet onder een publieke router.
 
+## Tiles-opslag (`STORAGES["tiles"]`)
+
+De PMTiles en geserveerde GeoJSON van `rgs_django_spatial.tiles` staan in een gewone
+Django-storage, standaard de alias `tiles` in `settings.STORAGES` (anders:
+`SPATIAL_TILES_STORAGE_ALIAS`). De storage moet overschrijven toestaan en `url()` moet
+het pad geven waar de browser de tiles laadt. Heeft de storage `url_signed()` (zoals
+`django_fsspec.FsspecStorage` op S3), dan krijgt de browser presigned URL's met een
+geldigheid van `TILES_URL_TTL` seconden (default 86400).
+
+```python
+# lokaal: bestanden onder VAR_DIR/tiles, geserveerd op /tiles/ (bv. nginx-sidecar)
+STORAGES["tiles"] = {
+    "BACKEND": "django.core.files.storage.FileSystemStorage",
+    "OPTIONS": {"location": VAR_DIR / "tiles", "base_url": "/tiles/", "allow_overwrite": True},
+}
+
+# S3: private bucket, presigned GET-URL's (range-requests vanuit de browser → CORS op de bucket)
+STORAGES["tiles"] = {
+    "BACKEND": "django_fsspec.FsspecStorage",
+    "OPTIONS": {
+        "on_collision": "overwrite",
+        "storage_config": {
+            "protocol": "s3",
+            "key": S3_ACCESS_KEY,
+            "secret": S3_SECRET_KEY,
+            "endpoint_url": "https://s3.nl-ams.scw.cloud",
+            "client_kwargs": {"region_name": "nl-ams"},
+            "relative_to_path": f"{S3_BUCKET_TILES}/{S3_TILES_PREFIX}",
+        },
+    },
+}
+```
+
+De oude settings `TILES_STORAGE`/`TILES_S3`/`VAR_DIR` werken nog één release (met
+`DeprecationWarning`, django-fsspec vereist); zie `CHANGELOG.md` 0.11.0.
+
 ## Codestijl en dev-config
 
 De ruff-kernregels staan in `ruff-gedeeld.toml`, een byte-gelijke kopie van de gedeelde
