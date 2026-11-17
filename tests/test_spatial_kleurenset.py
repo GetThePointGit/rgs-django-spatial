@@ -55,7 +55,8 @@ def test_style_id_is_uuid_en_layer_style_fk_volgt():
 
 def test_kleurenset_permissies_gelijk_aan_style():
     """Kleurenset volgt hetzelfde org_adm-mutatiepatroon als SpatialStyle (d67c8b6):
-    `auth` mag alleen selecteren, insert/update/delete staan alleen op `org_adm`.
+    `auth` mag alleen selecteren, insert/update/delete staan alleen op `org_adm`,
+    sinds urbanworks#433 beperkt tot de actieve organisatie.
     """
     kleurenset_perms = SpatialKleurenset.get_permissions()
     style_perms = SpatialStyle.get_permissions()
@@ -64,7 +65,8 @@ def test_kleurenset_permissies_gelijk_aan_style():
 
     # Pin de concrete contract, niet alleen de gelijkheid met SpatialStyle.
     assert kleurenset_perms["auth"] == {"select": {}}
-    assert kleurenset_perms["org_adm"] == {"insert": {}, "update": {}, "delete": {}}
+    eigen_org = {"access_through_id": {"_eq": "organisation"}, "access_id": {"_eq": "x-hasura-org-id"}}
+    assert kleurenset_perms["org_adm"] == {"insert": eigen_org, "update": eigen_org, "delete": eigen_org}
 
 
 def test_migratie_0007_zet_db_default_gen_random_uuid():

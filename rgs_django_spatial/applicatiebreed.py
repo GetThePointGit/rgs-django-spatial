@@ -5,6 +5,9 @@ applicatiebreed (zichtbaar en bruikbaar voor alle organisaties, alleen door
 staf te beheren). Besluit opdrachtgever 23-09:
 
 - een **laag** neemt haar **bron** mee: die wordt ook applicatiebreed;
+- een laag neemt ook haar **stijlkoppelingen** mee, met de stijlen en de
+  kleurensets waar die naar verwijzen (urbanworks#433): anders zou een
+  applicatiebrede laag stijlen tonen die alleen de oude organisatie kan lezen;
 - een **thema** wordt **gekopieerd**, niet verplaatst: de organisatie houdt
   haar eigen thema (en haar andere lagen erin); de geüpgradede laag komt onder
   het applicatiebrede thema met dezelfde naam, dat hergebruikt wordt als het
@@ -23,7 +26,15 @@ from __future__ import annotations
 from django.db import transaction
 from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
-from .models import SpatialLayer, SpatialMapLayer, SpatialSource, SpatialTheme
+from .models import (
+    SpatialKleurenset,
+    SpatialLayer,
+    SpatialLayerStyle,
+    SpatialMapLayer,
+    SpatialSource,
+    SpatialStyle,
+    SpatialTheme,
+)
 
 
 class ApplicatiebreedConflict(ValueError):
@@ -76,6 +87,67 @@ def _maak_applicatiebreed(obj: SpatialLayer | SpatialSource) -> bool:
     obj.access_id = None
     obj.save(update_fields=["access_through", "access_id"])
     return True
+
+
+def kleurenset_ids(style_config) -> set[str]:
+    """Verzamel de kleurenset-id's waar een stijlconfiguratie naar verwijst.
+
+    Parameters
+    ----------
+    style_config : object
+        De JSON-waarde van ``spatial_style.style_config`` (willekeurig genest).
+
+    Returns
+    -------
+    set of str
+        Alle waarden onder een sleutel ``kleurensetId``, als tekst.
+    """
+    gevonden: set[str] = set()
+    if isinstance(style_config, dict):
+        for sleutel, waarde in style_config.items():
+            if sleutel == "kleurensetId" and waarde:
+                gevonden.add(str(waarde))
+            else:
+                gevonden |= kleurenset_ids(waarde)
+    elif isinstance(style_config, list):
+        for waarde in style_config:
+            gevonden |= kleurenset_ids(waarde)
+    return gevonden
+
+
+def _stijlen_applicatiebreed(laag: SpatialLayer) -> int:
+    """Maak de stijlkoppelingen van een zojuist geüpgradede laag applicatiebreed.
+
+    De stijlen van die koppelingen en de kleurensets waar ze naar verwijzen
+    gaan mee. Gebruikt een andere laag van de organisatie dezelfde stijl, dan
+    verwijst die voortaan naar een applicatiebrede stijl (alleen-lezen voor de
+    organisatie), net als bij een gedeelde bron.
+
+    Parameters
+    ----------
+    laag : SpatialLayer
+        De laag, al applicatiebreed.
+
+    Returns
+    -------
+    int
+        Aantal omgezette stijlkoppelingen.
+    """
+    algemeen = {"access_through_id": EnumAccessThrough.AUTHENTICATED, "access_id": None}
+    koppelingen = SpatialLayerStyle.objects.filter(layer=laag).exclude(
+        access_through_id=EnumAccessThrough.AUTHENTICATED
+    )
+    stijl_ids = [stijl_id for stijl_id in koppelingen.values_list("style_id", flat=True) if stijl_id]
+    stijlen = SpatialStyle.objects.filter(pk__in=stijl_ids)
+    sets: set[str] = set()
+    for config in stijlen.values_list("style_config", flat=True):
+        sets |= kleurenset_ids(config)
+    # Volgorde: eerst kleurensets en stijlen, dan de koppelingen. De trigger op
+    # spatial_layer_style weigert een applicatiebrede koppeling met een
+    # organisatiestijl.
+    SpatialKleurenset.objects.filter(pk__in=sets).update(**algemeen)
+    stijlen.update(**algemeen)
+    return koppelingen.update(**algemeen)
 
 
 def _applicatiebreed_thema(thema: SpatialTheme) -> tuple[SpatialTheme, bool]:
@@ -156,6 +228,7 @@ def upgrade_laag_naar_applicatiebreed(laag_id: int) -> dict:
 
     - de laag wordt applicatiebreed;
     - de bron gaat mee (wordt ook applicatiebreed);
+    - de stijlkoppelingen gaan mee, met hun stijlen en kleurensets;
     - voor elk organisatiethema waaronder de laag op een kaart hangt, komt de
       laag onder het applicatiebrede thema met dezelfde naam (aangemaakt als
       het nog niet bestaat). Het organisatiethema zelf blijft ongewijzigd.
@@ -169,7 +242,7 @@ def upgrade_laag_naar_applicatiebreed(laag_id: int) -> dict:
     -------
     dict
         ``{"laag_id": int, "laag_omgezet": bool, "bron_omgezet": bool,
-        "themas_aangemaakt": list[str]}``.
+        "themas_aangemaakt": list[str], "stijlen_omgezet": int}``.
 
     Raises
     ------
@@ -179,6 +252,7 @@ def upgrade_laag_naar_applicatiebreed(laag_id: int) -> dict:
     laag = SpatialLayer.objects.select_for_update(of=("self",)).select_related("source").get(pk=laag_id)
     laag_omgezet = _maak_applicatiebreed(laag)
     bron_omgezet = _maak_applicatiebreed(laag.source)
+    stijlen_omgezet = _stijlen_applicatiebreed(laag)
 
     themas_aangemaakt = []
     koppelingen = SpatialMapLayer.objects.select_for_update(of=("self",)).filter(layer=laag, theme__isnull=False)
@@ -195,4 +269,5 @@ def upgrade_laag_naar_applicatiebreed(laag_id: int) -> dict:
         "laag_omgezet": laag_omgezet,
         "bron_omgezet": bron_omgezet,
         "themas_aangemaakt": themas_aangemaakt,
+        "stijlen_omgezet": stijlen_omgezet,
     }
