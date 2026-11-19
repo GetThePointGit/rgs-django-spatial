@@ -1,6 +1,6 @@
 # Wijzigingen
 
-## 0.12.0 (nog niet getagd)
+## 0.12.0 (2026-11-19)
 
 ### Toegevoegd
 - **Scope op stijlen en kleurensets** (urbanworks#433, #17). `spatial_style` en
@@ -30,7 +30,32 @@
   stijlen en de kleurensets waar die naar verwijzen (`stijlen_omgezet` in het resultaat).
 - CI draait de suite ook op PostgreSQL (`tests/testapp/settings_postgres.py`).
 
+- **Projectniveau in de scope** (waterworks#548). `access_through = project` met het
+  project-id in `access_id`, op bron, laag, thema, stijl, kleurenset en stijlkoppeling.
+  - `SPATIAL_PERMISSIONS_HOOK` (callable `tabel -> {rol: {actie: filter}}`): de consumer
+    geeft per tabel extra rollen met een eigen lees- en schrijffilter mee, bijvoorbeeld
+    projectrollen via zijn rechtentabel. `scoped_table_permissions` heeft daarvoor de
+    parameter `tabel`.
+  - `SPATIAL_EXTRA_SCHRIJFROLLEN`: rollen die op de scope-kolommen, `vervangt` en
+    `authentication_config` het kolommasker van `org_adm` krijgen (`scope_fperm`).
+  - `SpatialAccess`: `lees_project_ids`, `schrijf_project_ids`, `lees_org_ids_via_project`;
+    `lees_filter(met_zichtbaarheid=True)`.
+  - Stijlkoppeling: op een projectlaag volgt een koppelrij de laag; op een organisatielaag
+    ook, behalve een projectrij. Een projectrij mag via `vervangt` een applicatiebrede rij
+    of een organisatierij vervangen; een rij die zelf iets vervangt is niet vervangbaar. Een
+    projectstijl hoort alleen bij een rij van dat project.
+  - Zonder de settings verandert er niets: geen extra rol, geen extra filter.
+  - Het pakket legt geen foreign key naar het projectmodel van de consumer. De Hasura-relatie
+    van `access_id` naar het project en het opruimen bij verwijderen regelt de consumer.
+- **`zichtbaarheid`** op bron, laag en thema (`enum_map_zichtbaarheid`):
+  `organisatie_leden` of `organisatie_projecten`. Alleen van betekenis bij scope organisatie;
+  bestaande rijen krijgen `organisatie_projecten`. Het pakket slaat de keuze op; de consumer
+  dwingt hem af via de hook en `lees_org_ids_via_project`.
+
 ### Gewijzigd
+- De constraints `spatial_layer_style_vervanger_per_org` en
+  `spatial_layer_style_vervangt_alleen_org` heten nu `..._vervanger_per_scope` (uniek op
+  `vervangt` + scope) en `..._vervangt_met_scope` (organisatie of project).
 - `unique_layer_style` (laag + stijl) is vervangen door `unique_layer_style_per_scope`
   (laag + stijl + scope): een organisatierij mag dezelfde stijl gebruiken als een
   standaardrij.
@@ -48,6 +73,12 @@
   stijlen- en kleurensetsdialoog sturen de scope mee vanaf de `@getthepointgit/map`-versie
   die bij urbanworks#433 hoort; bump die tegelijk. Een koppelrij op een organisatielaag
   krijgt de scope van de laag van de trigger, ook van een client die niets meestuurt.
+
+### Migratie (`0012_project_scope`)
+- Maakt `enum_map_zichtbaarheid` met zijn twee rijen, voegt `zichtbaarheid` toe, vervangt de
+  twee constraints en de functie achter de trigger `spatial_layer_style_scope`. Bestaande
+  rijen veranderen niet van scope.
+- Na het bijwerken: migreren en de Hasura-metadata opnieuw genereren/toepassen.
 
 ## 0.11.0 (2026-11-06)
 

@@ -119,4 +119,6 @@ class SpatialMapLayer(models.Model):
     def get_permissions(cls):
         # Volgt de scope van de laag: org_adm muteert alleen kaart-kaartlaag-koppelingen van lagen
         # van de actieve organisatie, staf alles (waterworks-ui#219).
-        return scoped_table_permissions({"layer": ORG_SCOPE_FILTER}, read_filter={"layer": LEES_SCOPE_FILTER})
+        return scoped_table_permissions(
+            {"layer": ORG_SCOPE_FILTER}, read_filter={"layer": LEES_SCOPE_FILTER}, tabel=cls._meta.db_table
+        )

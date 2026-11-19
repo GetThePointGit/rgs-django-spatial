@@ -65,8 +65,8 @@ class SpatialStyle(models.Model):
     )
 
     # Scope (urbanworks#433): applicatiebreed of van één organisatie.
-    access_through = access_through_field("Bereik van de stijl: applicatiebreed of één organisatie")
-    access_id = access_id_field("Organisatie-id als de stijl van één organisatie is")
+    access_through = access_through_field("Bereik van de stijl: applicatiebreed, één organisatie of één project")
+    access_id = access_id_field("Organisatie- of project-id als de stijl van één organisatie of project is")
 
     class Meta:
         db_table = "spatial_style"
@@ -88,4 +88,4 @@ class SpatialStyle(models.Model):
         # org_adm muteert alleen stijlen van de actieve organisatie, staf alles.
         # `auth` behoudt select; met SPATIAL_RESTRICT_READ alleen applicatiebreed
         # plus de actieve organisatie.
-        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER)
+        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER, tabel=cls._meta.db_table)

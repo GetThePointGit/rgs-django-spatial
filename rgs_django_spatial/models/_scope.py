@@ -32,13 +32,38 @@ Stijlkoppelingen (urbanworks#433) hebben een **eigen** scope: een organisatie
 mag een eigen koppelrij op een applicatiebrede laag hangen (een eigen stijl, of
 een variant die een standaardstijl vervangt). Zie
 :mod:`rgs_django_spatial.models.spatial_layer_style`.
+
+Projectniveau (waterworks#548)
+------------------------------
+Een rij kan ook bij **één project** horen: ``access_through = project`` met het
+project-id in ``access_id``. Het pakket kent het projectmodel, de projectrollen en
+de rechtentabel van de consumer niet; de standaardrechten hierboven geven op
+projectrijen daarom alleen staf toegang. De consumer vult de rest in:
+
+- ``SPATIAL_PERMISSIONS_HOOK`` (pad naar een callable ``tabel -> {rol: {actie:
+  filter}}``) voegt per tabel rollen met een eigen lees- en schrijffilter toe,
+  zie :func:`scoped_table_permissions`;
+- ``SPATIAL_EXTRA_SCHRIJFROLLEN`` (lijst rolnamen) geeft die rollen op de
+  scope-kolommen dezelfde kolomrechten als ``org_adm``, zie :func:`scope_fperm`.
+
+Zonder deze settings verandert er niets.
+
+Bron, laag en thema hebben daarnaast ``zichtbaarheid`` (alleen van betekenis bij
+scope organisatie): ``organisatie_leden`` of ``organisatie_projecten`` (ook wie
+een project van die organisatie mag lezen). Ook die regel dwingt de consumer af,
+via de hook en de resolver van :mod:`rgs_django_spatial.access`.
 """
 
 from django.conf import settings
+from django.utils.module_loading import import_string
 from rgs_django_utils.database import dj_extended_models as models
 from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
 from ..app_lagen import en_geen_app_rij
+from .enums.map_zichtbaarheid import EnumMapZichtbaarheid
+
+SCOPES_MET_ID = (EnumAccessThrough.ORGANISATION, EnumAccessThrough.PROJECT)
+"""Scopes waarbij ``access_id`` gevuld is (organisatie-id of project-id)."""
 
 ORG_SCOPE_FILTER = {
     "access_through_id": {"_eq": EnumAccessThrough.ORGANISATION},
@@ -66,12 +91,77 @@ def lezen_beperkt() -> bool:
     return bool(getattr(settings, "SPATIAL_RESTRICT_READ", False))
 
 
+def extra_schrijfrollen() -> tuple[str, ...]:
+    """Geef de rollen van de consumer die scope-kolommen mogen schrijven.
+
+    Returns
+    -------
+    tuple of str
+        De setting ``SPATIAL_EXTRA_SCHRIJFROLLEN`` (standaard leeg), bv.
+        ``("proj_man",)`` voor een projectbeheerder die projectrijen beheert.
+    """
+    return tuple(getattr(settings, "SPATIAL_EXTRA_SCHRIJFROLLEN", ()))
+
+
+def scope_fperm(public: str = "---", **rollen: str) -> models.FPerm:
+    """Maak kolomrechten waarin de extra schrijfrollen ``org_adm`` volgen.
+
+    Voor kolommen die ``org_adm`` ruimer mag schrijven dan ``auth`` (de
+    scope-kolommen, ``vervangt``, de authenticatieconfiguratie van een bron).
+    Een rol uit ``SPATIAL_EXTRA_SCHRIJFROLLEN`` zou via ``PERMISSION_TREE``
+    anders het smallere masker van ``auth`` erven.
+
+    Parameters
+    ----------
+    public : str, optional
+        Masker voor rollen zonder eigen regel. Standaard ``'---'``.
+    **rollen : str
+        Masker per rol, als bij ``FPerm``.
+
+    Returns
+    -------
+    FPerm
+        De kolomrechten, met voor elke extra schrijfrol zonder eigen masker het
+        masker van ``org_adm``.
+    """
+    if "org_adm" in rollen:
+        for rol in extra_schrijfrollen():
+            rollen.setdefault(rol, rollen["org_adm"])
+    return models.FPerm(public, **rollen)
+
+
+def _rechten_van_consumer(tabel: str | None) -> dict[str, dict]:
+    """Vraag de consumer om extra rollen voor één tabel.
+
+    Parameters
+    ----------
+    tabel : str or None
+        Tabelnaam (``db_table``); ``None`` slaat de hook over.
+
+    Returns
+    -------
+    dict of str to dict
+        ``{rol: {actie: filter}}`` uit ``SPATIAL_PERMISSIONS_HOOK``; leeg als de
+        setting ontbreekt.
+
+    Raises
+    ------
+    ImportError
+        Als het ingestelde pad niet te importeren is.
+    """
+    pad = getattr(settings, "SPATIAL_PERMISSIONS_HOOK", None)
+    if not pad or tabel is None:
+        return {}
+    return dict(import_string(pad)(tabel) or {})
+
+
 def scoped_table_permissions(
     scope_filter: dict,
     org_adm_select: dict | None = None,
     read_filter: dict | None = None,
     app_kolom: str | None = None,
     org_adm_insert: dict | None = None,
+    tabel: str | None = None,
 ) -> models.TPerm:
     """Bouw de tabelpermissies voor een tabel met organisatie-scope.
 
@@ -96,6 +186,14 @@ def scoped_table_permissions(
         gekoppeld (ook ``sys_adm``). Select en insert blijven gelijk.
     org_adm_insert : dict, optional
         Afwijkende insert-check voor ``org_adm``. Standaard ``scope_filter``.
+    tabel : str, optional
+        Tabelnaam (``db_table``). Daarmee wordt ``SPATIAL_PERMISSIONS_HOOK``
+        geraadpleegd: een callable ``tabel -> {rol: {actie: filter}}`` van de
+        consumer. Elke rol die hij teruggeeft vervangt de regel van die rol
+        hieronder (of voegt de rol toe); zo krijgen projectrollen hun eigen
+        lees- en schrijffilter (waterworks#548). Het app-rijfilter
+        (``app_kolom``) komt ook op hun update en delete. Zonder setting
+        verandert er niets.
 
     Returns
     -------
@@ -115,16 +213,22 @@ def scoped_table_permissions(
     }
     if org_adm_select is not None:
         org_adm["select"] = org_adm_select
-    return models.TPerm(
-        public=None,
-        auth={"select": read_filter if (read_filter is not None and lezen_beperkt()) else {}},
-        org_adm=org_adm,
-        sys_adm={"select": {}, "insert": {}, "update": beschermd({}), "delete": beschermd({})},
-    )
+    rechten = {
+        "auth": {"select": read_filter if (read_filter is not None and lezen_beperkt()) else {}},
+        "org_adm": org_adm,
+        "sys_adm": {"select": {}, "insert": {}, "update": beschermd({}), "delete": beschermd({})},
+    }
+    for rol, acties in _rechten_van_consumer(tabel).items():
+        acties = dict(acties)
+        for actie in ("update", "delete"):
+            if actie in acties:
+                acties[actie] = beschermd(acties[actie])
+        rechten[rol] = acties
+    return models.TPerm(public=None, **rechten)
 
 
 def access_through_field(doc_short: str) -> models.ForeignKey:
-    """Maak het ``access_through``-veld (applicatiebreed of organisatie).
+    """Maak het ``access_through``-veld (applicatiebreed, organisatie of project).
 
     Parameters
     ----------
@@ -146,13 +250,13 @@ def access_through_field(doc_short: str) -> models.ForeignKey:
         verbose_name="toegang via",
         config=models.Config(
             doc_short=doc_short,
-            permissions=models.FPerm("---", auth="-s-", org_adm="is-", sys_adm="isu"),
+            permissions=scope_fperm("---", auth="-s-", org_adm="is-", sys_adm="isu"),
         ),
     )
 
 
 def access_id_field(doc_short: str) -> models.IntegerField:
-    """Maak het ``access_id``-veld (organisatie-id bij organisatie-scope).
+    """Maak het ``access_id``-veld (organisatie-id of project-id, naar de scope).
 
     Parameters
     ----------
@@ -171,13 +275,40 @@ def access_id_field(doc_short: str) -> models.IntegerField:
         blank=True,
         config=models.Config(
             doc_short=doc_short,
-            permissions=models.FPerm("---", auth="-s-", org_adm="is-", sys_adm="isu"),
+            permissions=scope_fperm("---", auth="-s-", org_adm="is-", sys_adm="isu"),
+        ),
+    )
+
+
+def zichtbaarheid_field() -> models.ForeignKey:
+    """Maak het veld ``zichtbaarheid`` van bron, laag en thema.
+
+    Returns
+    -------
+    ForeignKey
+        FK naar ``EnumMapZichtbaarheid`` met default ``organisatie_projecten``
+        (ook in de database). Alleen van betekenis bij scope organisatie.
+        ``org_adm`` en staf mogen hem zetten en wijzigen.
+    """
+    return models.ForeignKey(
+        EnumMapZichtbaarheid,
+        on_delete=models.PROTECT,
+        default=EnumMapZichtbaarheid.ORGANISATIE_PROJECTEN,
+        db_default=EnumMapZichtbaarheid.ORGANISATIE_PROJECTEN,
+        verbose_name="zichtbaarheid",
+        related_name="+",
+        config=models.Config(
+            doc_short=(
+                "Wie een rij van een organisatie ziet: alleen de leden, of ook wie een project "
+                "van die organisatie mag lezen. Zonder betekenis bij een andere scope"
+            ),
+            permissions=models.FPerm("---", auth="-s-", org_adm="isu", sys_adm="isu"),
         ),
     )
 
 
 def unique_name_per_scope(table: str) -> models.UniqueConstraint:
-    """Naam uniek binnen één scope (applicatiebreed, of per organisatie).
+    """Naam uniek binnen één scope (applicatiebreed, per organisatie of per project).
 
     ``nulls_distinct=False`` zodat twee applicatiebrede rijen (``access_id``
     leeg) met dezelfde naam óók botsen.
