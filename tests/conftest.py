@@ -16,6 +16,6 @@ def _toegang_enumrijen(request):
     request.getfixturevalue("db")
     from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
-    for pk in ("authenticated", "organisation"):
+    for pk in ("authenticated", "organisation", "project"):
         EnumAccessThrough.objects.get_or_create(id=pk, defaults={"name": pk})
     yield

@@ -5,8 +5,10 @@ from ._scope import (
     ORG_SCOPE_FILTER,
     access_id_field,
     access_through_field,
+    scope_fperm,
     scoped_table_permissions,
     unique_name_per_scope,
+    zichtbaarheid_field,
 )
 from ._sections import section_maps
 
@@ -28,8 +30,11 @@ class SpatialSource(models.Model):
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
-    access_through = access_through_field("Toegang via: applicatiebreed (authenticated) of organisatie")
-    access_id = access_id_field("ID van de organisatie waartoe deze kaartbron behoort (leeg = applicatiebreed)")
+    access_through = access_through_field("Toegang via: applicatiebreed (authenticated), organisatie of project")
+    access_id = access_id_field(
+        "ID van de organisatie of het project waartoe deze kaartbron behoort (leeg = applicatiebreed)"
+    )
+    zichtbaarheid = zichtbaarheid_field()
     description = models.TextStringField(
         verbose_name="omschrijving",
         null=True,
@@ -143,7 +148,7 @@ class SpatialSource(models.Model):
             # workflow: wie een kaartbron al mocht aanmaken/wijzigen kon de
             # authenticatieconfiguratie ook al schrijven, alleen niet apart
             # afgeschermd bij het lezen.
-            permissions=models.FPerm("---", org_adm="isu"),
+            permissions=scope_fperm("---", org_adm="isu"),
         ),
     )
 
@@ -173,4 +178,5 @@ class SpatialSource(models.Model):
             org_adm_select=ORG_SCOPE_FILTER,
             read_filter=LEES_SCOPE_FILTER,
             app_kolom="source_config",
+            tabel=cls._meta.db_table,
         )

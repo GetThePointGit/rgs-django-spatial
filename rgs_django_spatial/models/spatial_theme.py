@@ -7,6 +7,7 @@ from ._scope import (
     access_through_field,
     scoped_table_permissions,
     unique_name_per_scope,
+    zichtbaarheid_field,
 )
 from ._sections import section_maps
 
@@ -28,8 +29,11 @@ class SpatialTheme(models.Model):
             permissions=models.FPerm(auth="isu"),
         ),
     )
-    access_through = access_through_field("Toegang via: applicatiebreed (authenticated) of organisatie")
-    access_id = access_id_field("ID van de organisatie waartoe dit thema behoort (leeg = applicatiebreed)")
+    access_through = access_through_field("Toegang via: applicatiebreed (authenticated), organisatie of project")
+    access_id = access_id_field(
+        "ID van de organisatie of het project waartoe dit thema behoort (leeg = applicatiebreed)"
+    )
+    zichtbaarheid = zichtbaarheid_field()
     order = models.IntegerField(
         verbose_name="volgorde",
         default=0,
@@ -58,4 +62,4 @@ class SpatialTheme(models.Model):
     def get_permissions(cls):
         # org_adm muteert alleen thema's van de actieve organisatie, staf alles;
         # lezen blijft breed (waterworks-ui#219, zie _scope.py).
-        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER)
+        return scoped_table_permissions(ORG_SCOPE_FILTER, read_filter=LEES_SCOPE_FILTER, tabel=cls._meta.db_table)

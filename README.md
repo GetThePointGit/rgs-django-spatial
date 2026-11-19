@@ -5,10 +5,10 @@ Datamodel en functies om met (configureerbare) kaarten in de frontend te werken.
 
 ## Toegang: algemeen of van één eigenaar
 
-Bronnen, lagen en thema's zijn **algemeen** (`access_through = authenticated`) of van
-**één eigenaar** (`organisation` + `access_id`). De consumer bepaalt wie wat mag; het
-pakket kent zijn organisatiemodel niet. Stijlen en kleurensets hebben (nog) geen scope:
-die volgt in rgs-django-spatial#17.
+Bronnen, lagen, thema's, stijlen en kleurensets zijn **algemeen**
+(`access_through = authenticated`), van **één eigenaar** (`organisation` + `access_id`) of
+van **één project** (`project` + `access_id`). De consumer bepaalt wie wat mag; het pakket
+kent zijn organisatie- en projectmodel niet.
 
 Beide settings zijn optioneel. **Zonder deze settings is het gedrag ongewijzigd**: geen
 extra filter op de routes in `api.py`, geen rijfilter op de Hasura-select, en er is geen
@@ -35,6 +35,31 @@ migratie of permissiewijziging bij gekomen.
   aan een applicatiebrede laag, als extra stijl of als variant die een standaardstijl
   vervangt (`spatial_layer_style.vervangt`, `standaard`); zie de docstring van
   `models/spatial_layer_style.py` en `CHANGELOG.md` 0.12.0.
+- **Projectniveau** (waterworks#548): een rij kan ook van één project zijn
+  (`access_through = project`, `access_id` = project-id). Het pakket kent het projectmodel
+  en de projectrollen van de consumer niet; zonder de settings hieronder ziet en beheert
+  alleen staf zulke rijen via Hasura.
+  - `SPATIAL_PERMISSIONS_HOOK = "pad.naar.functie"`: callable `(tabel) -> {rol: {actie:
+    filter}}`. Elke rol die hij teruggeeft krijgt op die tabel die Hasura-regel (en
+    vervangt een regel van het pakket voor dezelfde rol). Het app-rijfilter van bron en
+    laag komt er vanzelf bij op update en delete.
+  - `SPATIAL_EXTRA_SCHRIJFROLLEN = ["proj_man"]`: deze rollen krijgen op `access_through`,
+    `access_id`, `spatial_layer_style.vervangt` en `spatial_source.authentication_config`
+    hetzelfde kolommasker als `org_adm`. **Let op:** geef zo'n rol op `spatial_source` dan
+    een eigen select-filter dat alleen de rijen toont die hij mag beheren, anders leest hij
+    de credentials van elke bron die hij mag zien.
+  - `SpatialAccess` heeft erbij: `lees_project_ids`, `schrijf_project_ids` en
+    `lees_org_ids_via_project` (zie hieronder).
+  - De relatie van `access_id` naar het project (voor een Hasura-filter via de rechtentabel)
+    en het opruimen bij het verwijderen van een project regelt de consumer: het pakket legt
+    geen foreign key naar een model dat het niet kent.
+- **`zichtbaarheid`** op bron, laag en thema (alleen van betekenis bij scope organisatie):
+  `organisatie_leden` of `organisatie_projecten` (standaard, ook voor bestaande rijen). Met
+  `organisatie_projecten` mag ook wie een project van die organisatie leest de rij zien:
+  in `SpatialAccess` via `lees_org_ids_via_project`, in Hasura via de hook.
+- Stijlen per project: een projectrij in `spatial_layer_style` werkt als een
+  organisatierij en mag via `vervangt` een applicatiebrede rij of een organisatierij
+  vervangen. Volgorde bij het oplossen: project, organisatie, applicatiebreed.
 - Zet geen geheime sleutels in een URL in `source_config`: die is voor elke rol die de
   rij leest zichtbaar. Credentials horen in `authentication_config`.
 - `GET /mapproxy-config.yaml` filtert bewust niet: de MapProxy-sidecar heeft geen
