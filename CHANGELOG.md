@@ -1,6 +1,6 @@
 # Wijzigingen
 
-## 0.12.0 (nog niet getagd)
+## 0.12.0 (2026-11-19)
 
 ### Toegevoegd
 - **Scope op stijlen en kleurensets** (urbanworks#433, #17). `spatial_style` en
