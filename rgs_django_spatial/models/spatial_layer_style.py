@@ -1,10 +1,40 @@
+"""Koppeling tussen een kaartlaag en een stijl, met een eigen scope.
+
+Een koppelrij is applicatiebreed of van één organisatie (urbanworks#433):
+
+- op een **organisatielaag** volgt de koppelrij altijd de scope van de laag;
+- op een **applicatiebrede laag** (ook de app-laag) staan de applicatiebrede
+  koppelrijen (de standaardstijlen, beheerd door staf) en mag elke organisatie
+  eigen rijen hangen: een extra stijl, of een **variant** die via ``vervangt``
+  een standaardrij voor die organisatie vervangt. Verdwijnt de variant, dan
+  geldt de standaardrij weer;
+- ``standaard`` wijst per scope hoogstens één rij aan als voorgeselecteerde
+  stijl. Heeft een organisatie er geen, dan blijft
+  ``spatial_map_layer.default_style`` (en ``standaard_in``) gelden.
+
+Welke rijen voor een gebruiker gelden, lost de client op (``@getthepointgit/map``):
+applicatiebreed plus de actieve organisatie, min de vervangen standaardrijen.
+
+De regels staan op drie plekken: :meth:`SpatialLayerStyle.clean` (formulieren,
+ORM), de constraints in ``Meta`` en, omdat Hasura Django omzeilt, de trigger
+``spatial_layer_style_scope`` (migratie 0011, alleen PostgreSQL).
+"""
+
 import re
 from collections.abc import Iterable
 
 from django.core.exceptions import ValidationError
+from django.db.models import Q
 from rgs_django_utils.database import dj_extended_models as models
+from rgs_django_utils.models.enums.enum_access_through import EnumAccessThrough
 
-from ._scope import LEES_SCOPE_FILTER, ORG_SCOPE_FILTER, scoped_table_permissions
+from ._scope import (
+    LEES_SCOPE_FILTER,
+    ORG_SCOPE_FILTER,
+    access_id_field,
+    access_through_field,
+    scoped_table_permissions,
+)
 from ._sections import section_maps
 
 _MASKER = re.compile(r"[A-Z]+")
@@ -186,6 +216,38 @@ class SpatialLayerStyle(models.Model):
         ),
     )
 
+    # Eigen scope (urbanworks#433); op een organisatielaag altijd die van de laag.
+    access_through = access_through_field("Bereik van de stijlkoppeling: applicatiebreed of één organisatie")
+    access_id = access_id_field("Organisatie-id als de stijlkoppeling van één organisatie is")
+    vervangt = models.ForeignKey(
+        "self",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        verbose_name="vervangt",
+        related_name="vervangers",
+        config=models.Config(
+            doc_short=(
+                "Applicatiebrede stijlkoppeling van dezelfde laag die deze organisatierij vervangt; "
+                "leeg = een eigen extra stijl"
+            ),
+            # Alleen bij aanmaken (zoals `layer`): er is geen update-check.
+            permissions=models.FPerm("---", auth="-s-", org_adm="is-", sys_adm="isu"),
+        ),
+    )
+    standaard = models.BooleanField(
+        verbose_name="standaard",
+        default=False,
+        db_default=False,
+        config=models.Config(
+            doc_short=(
+                "Voorgeselecteerde stijl van de laag binnen deze scope; hoogstens één per laag per scope. "
+                "Zonder zo'n rij geldt spatial_map_layer.default_style"
+            ),
+            permissions=models.FPerm("---", auth="isu"),
+        ),
+    )
+
     class Meta:
         db_table = "spatial_layer_style"
         verbose_name = "kaartlaag stijl"
@@ -193,10 +255,29 @@ class SpatialLayerStyle(models.Model):
         ordering = ["layer", "order"]
 
         constraints = [
+            # Laag + stijl uniek per scope: een organisatierij mag dezelfde stijl
+            # gebruiken als een standaardrij (andere volgorde of standaard).
             models.UniqueConstraint(
-                fields=["layer", "style"],
-                name="unique_layer_style",
-            )
+                fields=["layer", "style", "access_through", "access_id"],
+                nulls_distinct=False,
+                name="unique_layer_style_per_scope",
+            ),
+            models.UniqueConstraint(
+                fields=["layer", "access_through", "access_id"],
+                condition=Q(standaard=True),
+                nulls_distinct=False,
+                name="spatial_layer_style_standaard_per_scope",
+            ),
+            # Hoogstens één vervanger per standaardrij per organisatie.
+            models.UniqueConstraint(
+                fields=["vervangt", "access_id"],
+                condition=Q(vervangt__isnull=False),
+                name="spatial_layer_style_vervanger_per_org",
+            ),
+            models.CheckConstraint(
+                condition=Q(vervangt__isnull=True) | Q(access_through=EnumAccessThrough.ORGANISATION),
+                name="spatial_layer_style_vervangt_alleen_org",
+            ),
         ]
 
     class TableDescription:
@@ -233,17 +314,86 @@ class SpatialLayerStyle(models.Model):
         if fouten:
             raise ValidationError(fouten)
 
+    def _volg_laagscope(self) -> None:
+        """Neem op een organisatielaag de scope van de laag over.
+
+        Zelfde regel als de trigger ``spatial_layer_style_scope``; hier herhaald
+        zodat de instantie na ``save()`` klopt en de regel ook zonder PostgreSQL
+        geldt.
+        """
+        if self.layer_id is None:
+            return
+        laag = self.layer
+        if laag.access_through_id == EnumAccessThrough.ORGANISATION:
+            self.access_through_id = EnumAccessThrough.ORGANISATION
+            self.access_id = laag.access_id
+
+    def _valideer_scope(self) -> None:
+        """Toets scope, ``vervangt`` en ``standaard`` van deze koppelrij.
+
+        Raises
+        ------
+        django.core.exceptions.ValidationError
+            Met de meldingen per veld.
+        """
+        fouten: dict[str, list[str]] = {}
+        van_org = self.access_through_id == EnumAccessThrough.ORGANISATION
+        if van_org and self.access_id is None:
+            fouten["access_id"] = ["Een stijlkoppeling van een organisatie heeft een organisatie-id nodig."]
+        if not van_org and self.access_id is not None:
+            fouten["access_id"] = ["Een applicatiebrede stijlkoppeling heeft geen organisatie-id."]
+
+        stijl = self.style if self.style_id is not None else None
+        if stijl is not None and stijl.access_through_id == EnumAccessThrough.ORGANISATION:
+            if not van_org or stijl.access_id != self.access_id:
+                fouten["style"] = ["De stijl is van een andere organisatie dan deze stijlkoppeling."]
+
+        if self.vervangt_id is not None:
+            doel = self.vervangt
+            if not van_org:
+                fouten["vervangt"] = [
+                    "Alleen een stijlkoppeling van een organisatie kan een standaardstijl vervangen."
+                ]
+            elif doel.pk == self.pk or doel.layer_id != self.layer_id:
+                fouten["vervangt"] = ["De vervangen stijlkoppeling hoort bij een andere kaartlaag."]
+            elif doel.access_through_id != EnumAccessThrough.AUTHENTICATED or doel.vervangt_id is not None:
+                fouten["vervangt"] = ["Alleen een applicatiebrede stijlkoppeling kan vervangen worden."]
+            elif (
+                SpatialLayerStyle.objects.filter(vervangt_id=self.vervangt_id, access_id=self.access_id)
+                .exclude(pk=self.pk)
+                .exists()
+            ):
+                fouten["vervangt"] = ["Deze organisatie heeft al een variant van deze standaardstijl."]
+
+        if self.standaard and (
+            SpatialLayerStyle.objects.filter(
+                layer_id=self.layer_id,
+                access_through_id=self.access_through_id,
+                access_id=self.access_id,
+                standaard=True,
+            )
+            .exclude(pk=self.pk)
+            .exists()
+        ):
+            fouten["standaard"] = ["Deze kaartlaag heeft binnen deze scope al een standaardstijl."]
+        if fouten:
+            raise ValidationError(fouten)
+
     def clean(self):
-        """Modelvalidatie inclusief de modulevelden (admin/formulieren)."""
+        """Modelvalidatie inclusief de modulevelden en de scope (admin/formulieren)."""
         super().clean()
         self._valideer_modules()
+        self._volg_laagscope()
+        self._valideer_scope()
 
     def save(self, *args, **kwargs):
-        """Sla op na validatie van de modulevelden.
+        """Sla op na validatie van de modulevelden en de scope.
 
         Ook ``update_or_create`` (de seed) komt hier langs. Hasura niet: die
         schrijft rechtstreeks in de database, dus de beheer-UI bewaakt de
-        één-standaard-per-letter-regel zelf.
+        één-standaard-per-letter-regel zelf. De scoperegels (``vervangt``,
+        ``standaard``, scope van laag en stijl) dwingt de database voor Hasura
+        af met constraints en de trigger ``spatial_layer_style_scope``.
 
         Parameters
         ----------
@@ -251,10 +401,19 @@ class SpatialLayerStyle(models.Model):
             Doorgegeven aan :meth:`django.db.models.Model.save`.
         """
         self._valideer_modules()
+        self._volg_laagscope()
+        self._valideer_scope()
         super().save(*args, **kwargs)
 
     @classmethod
     def get_permissions(cls):
-        # Volgt de scope van de laag: org_adm muteert alleen laagstijlen van lagen
-        # van de actieve organisatie, staf alles (waterworks-ui#219).
-        return scoped_table_permissions({"layer": ORG_SCOPE_FILTER}, read_filter={"layer": LEES_SCOPE_FILTER})
+        # Eigen scope (urbanworks#433): org_adm muteert alleen koppelrijen van de
+        # actieve organisatie, ook op een applicatiebrede laag; staf alles. De
+        # insert-check eist bovendien dat de laag applicatiebreed of van de eigen
+        # organisatie is. Lezen (met SPATIAL_RESTRICT_READ): de rij én haar laag
+        # zijn applicatiebreed of van de actieve organisatie.
+        return scoped_table_permissions(
+            ORG_SCOPE_FILTER,
+            read_filter={"_and": [LEES_SCOPE_FILTER, {"layer": LEES_SCOPE_FILTER}]},
+            org_adm_insert={"_and": [ORG_SCOPE_FILTER, {"layer": LEES_SCOPE_FILTER}]},
+        )

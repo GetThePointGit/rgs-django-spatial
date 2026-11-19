@@ -17,6 +17,18 @@ jobs:
         run: ruff check .
   tests:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       # Er is geen sibling-checkout ../rgs-django-utils in CI. Zonder committe
@@ -31,6 +43,16 @@ jobs:
           environments: prod
           cache: false
       - run: pixi run -e prod python -m pytest tests/ -v
+      # Dezelfde suite op PostgreSQL: de tests met een SpatialLayer (ArrayField)
+      # en de trigger spatial_layer_style_scope (urbanworks#433) bestaan alleen
+      # daar en worden op SQLite overgeslagen.
+      - name: pytest op PostgreSQL
+        run: pixi run -e prod python -m pytest tests/ --ds=testapp.settings_postgres
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
       # Bewaakt dat modelwijzigingen altijd in een migratie zitten (final-review
       # Important 2). --skip-checks is nodig omdat de sqlite-testsettings
       # 'django.contrib.postgres' niet in INSTALLED_APPS hebben (nodig voor

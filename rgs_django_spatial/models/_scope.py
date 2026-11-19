@@ -1,4 +1,7 @@
-"""Organisatie-scope van kaartlagen, -bronnen en -thema's (waterworks-ui#219).
+"""Organisatie-scope van kaartlagen, -bronnen, -thema's, stijlen en kleurensets.
+
+Lagen, bronnen en thema's sinds waterworks-ui#219; stijlen, kleurensets en de
+stijlkoppeling (``spatial_layer_style``) sinds urbanworks#433.
 
 Een rij is **applicatiebreed** (``access_through = authenticated``,
 ``access_id`` leeg) of hoort bij **één organisatie** (``access_through =
@@ -24,6 +27,11 @@ Rechten (Hasura):
   geen enkele rol, ook staf niet, worden gewijzigd of verwijderd: de update- en
   delete-filters van elke rol krijgen er :func:`~rgs_django_spatial.app_lagen.geen_app_rij`
   bij (zie ``app_kolom`` in :func:`scoped_table_permissions`).
+
+Stijlkoppelingen (urbanworks#433) hebben een **eigen** scope: een organisatie
+mag een eigen koppelrij op een applicatiebrede laag hangen (een eigen stijl, of
+een variant die een standaardstijl vervangt). Zie
+:mod:`rgs_django_spatial.models.spatial_layer_style`.
 """
 
 from django.conf import settings
@@ -63,6 +71,7 @@ def scoped_table_permissions(
     org_adm_select: dict | None = None,
     read_filter: dict | None = None,
     app_kolom: str | None = None,
+    org_adm_insert: dict | None = None,
 ) -> models.TPerm:
     """Bouw de tabelpermissies voor een tabel met organisatie-scope.
 
@@ -85,6 +94,8 @@ def scoped_table_permissions(
         JSON-kolom die app-rijen markeert (``source_config`` of ``params``).
         Dan wordt "geen app-rij" met EN aan update en delete van elke rol
         gekoppeld (ook ``sys_adm``). Select en insert blijven gelijk.
+    org_adm_insert : dict, optional
+        Afwijkende insert-check voor ``org_adm``. Standaard ``scope_filter``.
 
     Returns
     -------
@@ -97,7 +108,11 @@ def scoped_table_permissions(
     def beschermd(filter_: dict) -> dict:
         return en_geen_app_rij(filter_, app_kolom) if app_kolom else filter_
 
-    org_adm = {"insert": scope_filter, "update": beschermd(scope_filter), "delete": beschermd(scope_filter)}
+    org_adm = {
+        "insert": scope_filter if org_adm_insert is None else org_adm_insert,
+        "update": beschermd(scope_filter),
+        "delete": beschermd(scope_filter),
+    }
     if org_adm_select is not None:
         org_adm["select"] = org_adm_select
     return models.TPerm(

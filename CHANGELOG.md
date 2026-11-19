@@ -1,5 +1,54 @@
 # Wijzigingen
 
+## 0.12.0 (nog niet getagd)
+
+### Toegevoegd
+- **Scope op stijlen en kleurensets** (urbanworks#433, #17). `spatial_style` en
+  `spatial_kleurenset` krijgen `access_through` + `access_id`, met dezelfde rechten als laag,
+  bron en thema: `org_adm` muteert alleen rijen van de actieve organisatie, staf alles; lezen
+  is met `SPATIAL_RESTRICT_READ` beperkt tot applicatiebreed plus de actieve organisatie.
+  Een applicatiebrede stijl of kleurenset is voor `org_adm` dus alleen-lezen.
+- **Eigen scope op de stijlkoppeling** (`spatial_layer_style`). Op een organisatielaag volgt
+  een koppelrij altijd de laag. Op een applicatiebrede laag (ook de app-laag) mag een
+  organisatie eigen koppelrijen hangen:
+  - `vervangt` (FK naar een applicatiebrede koppelrij van dezelfde laag): deze rij is de
+    variant van die standaardstijl voor de organisatie. Hoogstens één variant per
+    standaardrij per organisatie; verdwijnt de variant, dan geldt de standaardrij weer, en
+    verdwijnt de standaardrij, dan verdwijnen de varianten mee (`CASCADE`);
+  - zonder `vervangt` is het een extra stijl van de organisatie;
+  - `standaard` (boolean): de voorgeselecteerde stijl binnen een scope, hoogstens één per
+    laag per scope. Zonder zo'n rij blijft `spatial_map_layer.default_style` gelden;
+    `standaard_in` (moduleletters) is ongewijzigd.
+
+  Welke rijen voor een gebruiker gelden lost de client op (`@getthepointgit/map`):
+  applicatiebreed plus de actieve organisatie, min de vervangen standaardrijen.
+- De regels zitten in `SpatialLayerStyle.clean()`/`save()`, in constraints en, omdat Hasura
+  Django omzeilt, in de trigger `spatial_layer_style_scope` (alleen PostgreSQL): scope volgt
+  een organisatielaag, een organisatiestijl hoort bij de organisatie van de koppelrij, en
+  `vervangt` wijst naar een applicatiebrede rij van dezelfde laag.
+- `upgrade_laag_naar_applicatiebreed` neemt de stijlkoppelingen van de laag mee, met hun
+  stijlen en de kleurensets waar die naar verwijzen (`stijlen_omgezet` in het resultaat).
+- CI draait de suite ook op PostgreSQL (`tests/testapp/settings_postgres.py`).
+
+### Gewijzigd
+- `unique_layer_style` (laag + stijl) is vervangen door `unique_layer_style_per_scope`
+  (laag + stijl + scope): een organisatierij mag dezelfde stijl gebruiken als een
+  standaardrij.
+- Hasura: de rechten op `spatial_layer_style` hangen niet meer aan de laag maar aan de rij
+  zelf. De insert-check van `org_adm` eist de eigen scope én een laag die applicatiebreed of
+  van de eigen organisatie is.
+
+### Migratie (`0011_stijl_scope`)
+- Bestaande koppelrijen krijgen de scope van hun laag. Bestaande stijlen en kleurensets
+  worden applicatiebreed, behalve als ze uitsluitend door lagen van precies één organisatie
+  worden gebruikt: die gaan naar die organisatie. Er wordt niets verwijderd of gekopieerd.
+- Na het bijwerken: migreren en de Hasura-metadata opnieuw genereren/toepassen.
+- **Let op voor consumers:** een `org_adm` kan een applicatiebrede stijl of kleurenset daarna
+  niet meer wijzigen, en een insert zonder scope wordt applicatiebreed en dus geweigerd. De
+  stijlen- en kleurensetsdialoog sturen de scope mee vanaf de `@getthepointgit/map`-versie
+  die bij urbanworks#433 hoort; bump die tegelijk. Een koppelrij op een organisatielaag
+  krijgt de scope van de laag van de trigger, ook van een client die niets meestuurt.
+
 ## 0.11.0 (2026-11-06)
 
 ### Gewijzigd

@@ -27,10 +27,14 @@ migratie of permissiewijziging bij gekomen.
   (404 voor onleesbare, 403 voor leesbare maar niet schrijfbare bronnen).
   `POST /capabilities/` vereist enig schrijfrecht. `GET /{id}/geojson/` eist dan
   een leesbare bron in de DB.
-- `SPATIAL_RESTRICT_READ = True`: de Hasura-select van bronnen, lagen, thema's en de
-  koppeltabellen (via hun laag) toont alleen algemene rijen en rijen van de actieve
-  organisatie (`x-hasura-org-id`); staf blijft `{}`. Stijlen en kleurensets blijven
-  ongefilterd.
+- `SPATIAL_RESTRICT_READ = True`: de Hasura-select van bronnen, lagen, thema's, stijlen,
+  kleurensets en de koppeltabellen toont alleen algemene rijen en rijen van de actieve
+  organisatie (`x-hasura-org-id`); staf blijft `{}`. De kaart-kaartlaag volgt haar laag,
+  de stijlkoppeling heeft een eigen scope én volgt haar laag.
+- Stijlen per organisatie (urbanworks#433): een organisatie hangt eigen stijlkoppelingen
+  aan een applicatiebrede laag, als extra stijl of als variant die een standaardstijl
+  vervangt (`spatial_layer_style.vervangt`, `standaard`); zie de docstring van
+  `models/spatial_layer_style.py` en `CHANGELOG.md` 0.12.0.
 - Zet geen geheime sleutels in een URL in `source_config`: die is voor elke rol die de
   rij leest zichtbaar. Credentials horen in `authentication_config`.
 - `GET /mapproxy-config.yaml` filtert bewust niet: de MapProxy-sidecar heeft geen
