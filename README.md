@@ -66,6 +66,22 @@ migratie of permissiewijziging bij gekomen.
   gebruiker en heeft de upstream van alle reproject-bronnen nodig. Schermt de consumer
   zelf af (netwerk) en mount hem niet onder een publieke router.
 
+## Stijlen valideren (`rgs_django_spatial.stijl`)
+
+`SpatialStyle.config` volgt het stijlmodel v3 van `@getthepointgit/map`. Controleer een
+geseede stijl voordat je hem wegschrijft; een fout komt anders pas in de browser uit:
+
+```python
+from rgs_django_spatial.stijl import valideer_stijl_config
+
+fouten = valideer_stijl_config(config, kleurenset_ids={str(k.id) for k in kleurensets})
+if fouten:
+    raise CommandError(f"Stijl {naam} is ongeldig: {'; '.join(fouten)}")
+```
+
+`stijl.schalen` heeft de bouwstenen voor stijldefinities (`zoom`, `stops`, kleurenramps),
+`stijl.conversie` zet een v2-config om naar v3.
+
 ## Tiles-opslag (`STORAGES["tiles"]`)
 
 De PMTiles en geserveerde GeoJSON van `rgs_django_spatial.tiles` staan in een gewone
