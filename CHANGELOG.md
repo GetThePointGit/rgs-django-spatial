@@ -1,5 +1,21 @@
 # Wijzigingen
 
+## 0.13.0 (2026-11-19)
+
+### Toegevoegd
+- **`rgs_django_spatial.stijl`** (#22): de Python-validatie van het stijlmodel v3, verhuisd uit
+  waterworks (`core/kaartlagen`), zodat elke consumer zijn geseede stijlen kan controleren
+  voordat hij ze wegschrijft:
+  - `stijl.validatie.valideer_stijl_config(config, kleurenset_ids=...)` geeft de lijst fouten
+    (leeg = geldig). Spiegel van de validator in `@getthepointgit/map`, op drie punten
+    bewust strenger (zie de module-docstring);
+  - `stijl.schalen`: `zoom`, `stops`, `RAMP_BLAUW`, `RAMP_AMBER` en de vaste kleurschalen
+    `jaarschaal_rdylgn`, `jaarschaal_inmeten` en `toetsklasseschaal`;
+  - `stijl.conversie`: `converteer_naar_v3` en `is_v3` voor v2-configuraties.
+
+  Geen gedragswijziging ten opzichte van de waterworks-versie, geen migratie. Consumers die de
+  modules zelf hadden, halen hun kopie weg en importeren uit de lib.
+
 ## 0.12.0 (2026-11-19)
 
 ### Toegevoegd
