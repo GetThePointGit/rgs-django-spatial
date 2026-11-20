@@ -158,7 +158,7 @@ class SpatialLayer(models.Model):
     extent = models.ArrayField(
         models.FloatField(),
         size=4,
-        verbose_name="extent",
+        verbose_name="begrenzing",
         null=True,
         blank=True,
         config=models.Config(
@@ -167,7 +167,7 @@ class SpatialLayer(models.Model):
         ),
     )
     min_zoom = models.IntegerField(
-        verbose_name="min zoom",
+        verbose_name="minimaal zoomniveau",
         null=True,
         blank=True,
         config=models.Config(
@@ -176,7 +176,7 @@ class SpatialLayer(models.Model):
         ),
     )
     max_zoom = models.IntegerField(
-        verbose_name="max zoom",
+        verbose_name="maximaal zoomniveau",
         null=True,
         blank=True,
         config=models.Config(

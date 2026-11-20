@@ -11,12 +11,12 @@ class EnumMapAuthType(BaseEnumExtended):
     API_KEY = "api_key"
     OAUTH2 = "oauth2"
 
-    config_fields = models.ArrayField(models.TextStringField())
+    config_fields = models.ArrayField(models.TextStringField(), verbose_name="configuratievelden")
 
     class Meta:
         db_table = "enum_map_auth_type"
-        verbose_name = "map authentication type"
-        verbose_name_plural = "map authentication types"
+        verbose_name = "authenticatietype kaartbron"
+        verbose_name_plural = "authenticatietypen kaartbron"
 
     class TableDescription:
         section = section_enum_maps

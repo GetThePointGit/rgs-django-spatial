@@ -76,7 +76,7 @@ class SpatialMap(models.Model):
     default_extent = models.ArrayField(
         models.FloatField(),
         size=4,
-        verbose_name="extent",
+        verbose_name="begrenzing",
         null=True,
         blank=True,
         config=models.Config(

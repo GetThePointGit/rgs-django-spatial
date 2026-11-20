@@ -48,14 +48,14 @@ class SpatialSource(models.Model):
     source_type = models.ForeignKey(
         "EnumMapSourceType",
         on_delete=models.PROTECT,
-        verbose_name="source type",
+        verbose_name="brontype",
         config=models.Config(
             doc_short="Type van de kaartbron",
             permissions=models.FPerm("---", auth="isu"),
         ),
     )
     source_config = models.JSONField(
-        verbose_name="source configuratie",
+        verbose_name="bronconfiguratie",
         config=models.Config(
             doc_short="Configuratie van de kaartbron, afhankelijk van het type",
             permissions=models.FPerm("---", auth="isu"),
@@ -63,7 +63,7 @@ class SpatialSource(models.Model):
     )
     geojson_file = models.FileField(
         upload_to="spatial_sources/geojson/",
-        verbose_name="geojson bestand",
+        verbose_name="GeoJSON-bestand",
         null=True,
         blank=True,
         config=models.Config(
@@ -83,7 +83,7 @@ class SpatialSource(models.Model):
         ),
     )
     tile_status = models.TextStringField(
-        "tile status",
+        "tegelstatus",
         default="geen",
         config=models.Config(
             doc_short="Status van tile-generatie: geen|bezig|klaar|fout (fase 2)",
@@ -91,7 +91,7 @@ class SpatialSource(models.Model):
         ),
     )
     tile_fout = models.TextField(
-        "tile foutmelding",
+        "foutmelding tegels",
         null=True,
         blank=True,
         config=models.Config(
@@ -108,7 +108,7 @@ class SpatialSource(models.Model):
         ),
     )
     tiles_updated_at = models.DateTimeField(
-        "tiles bijgewerkt op",
+        "tegels bijgewerkt op",
         null=True,
         blank=True,
         config=models.Config(
