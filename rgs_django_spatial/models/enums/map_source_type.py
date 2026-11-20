@@ -15,12 +15,12 @@ class EnumMapSourceType(BaseEnumExtended):
     WFS = "wfs"
     XYZ_TILE = "xyz_tile"
 
-    config_fields = models.ArrayField(models.TextStringField())
+    config_fields = models.ArrayField(models.TextStringField(), verbose_name="configuratievelden")
 
     class Meta:
         db_table = "enum_map_source_type"
-        verbose_name = "map source type"
-        verbose_name_plural = "map source types"
+        verbose_name = "type kaartbron"
+        verbose_name_plural = "typen kaartbron"
 
     class TableDescription:
         section = section_enum_maps

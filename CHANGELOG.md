@@ -1,5 +1,16 @@
 # Wijzigingen
 
+## 0.14.0 (2026-11-20)
+
+### Gewijzigd
+- **Nederlandse veldnamen** (waterworks#320). De `verbose_name`s die nog Engels waren zijn
+  vertaald: "brontype", "bronconfiguratie", "GeoJSON-bestand", "tegelstatus",
+  "foutmelding tegels", "tegels bijgewerkt op", "begrenzing", "minimaal zoomniveau",
+  "maximaal zoomniveau" en "configuratievelden". De enum-tabellen heten "type kaartbron" en
+  "authenticatietype kaartbron". Migratie `0013_nederlandse_veldnamen` wijzigt alleen
+  `verbose_name`s (geen SQL) en gaat uit van rgs-django-utils 0.19.0, waar `BaseEnum.name`
+  "naam" heet.
+
 ## 0.13.0 (2026-11-19)
 
 ### Toegevoegd
